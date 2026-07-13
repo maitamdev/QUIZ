@@ -16,6 +16,10 @@ Website tạo và làm bài trắc nghiệm theo phong cách game-show, gồm đ
 - Supabase Auth bảo vệ khu vực admin; RLS giới hạn dữ liệu theo chủ sở hữu.
 - Đáp án đúng không được gửi xuống máy người chơi; database chấm điểm qua RPC.
 - Mỗi lượt làm bài được lưu vào bảng `quiz_attempts` và cập nhật thống kê thật.
+- Dashboard kết quả thật: lượt hoàn thành, điểm trung bình, bảng người tham gia và câu hỏi khó.
+- Xuất kết quả dạng CSV và sao lưu từng bộ câu hỏi về JSON.
+- Điều hướng quản trị tối ưu cho điện thoại; editor cảnh báo thay đổi chưa lưu.
+- Có bộ kiểm thử tự động cho trình nhập JSON và giới hạn file an toàn.
 
 ## Chạy dự án
 
@@ -72,8 +76,11 @@ Không sử dụng `service_role`/secret key trong file `.env` của frontend.
 ## Build production
 
 ```bash
+npm run check
 npm run build
 npm run preview
 ```
+
+`npm run check` chạy toàn bộ test rồi mới build production.
 
 > Để link chia sẻ truy cập được từ Internet, hãy deploy bản build lên một domain công khai.

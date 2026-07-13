@@ -65,6 +65,27 @@ export async function fetchOwnerQuizzes(userId) {
   return (data || []).map(row => formatQuiz(row, true));
 }
 
+export async function fetchOwnerAttempts() {
+  const { data, error } = await supabase
+    .from('quiz_attempts')
+    .select('id, quiz_id, participant_name, score, total, answers, completed_at, quizzes(title)')
+    .order('completed_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(attempt => ({
+    id: attempt.id,
+    quizId: attempt.quiz_id,
+    quizTitle: attempt.quizzes?.title || 'Bộ câu hỏi đã xóa',
+    participantName: attempt.participant_name,
+    score: Number(attempt.score || 0),
+    total: Number(attempt.total || 0),
+    answers: Array.isArray(attempt.answers) ? attempt.answers : [],
+    completedAt: attempt.completed_at,
+    completedLabel: new Intl.DateTimeFormat('vi-VN', {
+      dateStyle: 'short', timeStyle: 'short'
+    }).format(new Date(attempt.completed_at))
+  }));
+}
+
 export async function fetchPublicQuiz(id) {
   let { data, error } = await supabase.from('quizzes').select(publicSelect)
     .eq('id', id).eq('status', 'published').single();

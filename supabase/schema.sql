@@ -171,10 +171,23 @@ declare
   v_question_id uuid;
   v_question_position integer;
   v_option_position integer;
+  v_option_count integer;
+  v_correct_option integer;
+  v_question_type text;
 begin
   if v_user is null then raise exception 'Authentication required'; end if;
-  if jsonb_array_length(coalesce(p_payload->'questions', '[]'::jsonb)) = 0 then
+  if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
+    raise exception 'Quiz payload must be a JSON object';
+  end if;
+  if nullif(trim(p_payload->>'title'), '') is null then
+    raise exception 'Quiz title is required';
+  end if;
+  if jsonb_typeof(p_payload->'questions') <> 'array'
+     or jsonb_array_length(p_payload->'questions') = 0 then
     raise exception 'A quiz needs at least one question';
+  end if;
+  if jsonb_array_length(p_payload->'questions') > 500 then
+    raise exception 'A quiz cannot contain more than 500 questions';
   end if;
 
   if p_quiz_id is null then
@@ -201,28 +214,49 @@ begin
   for v_question, v_question_position in
     select value, (ordinality - 1)::integer from jsonb_array_elements(p_payload->'questions') with ordinality
   loop
+    v_question_type := coalesce(v_question->>'type', 'choice');
+    if v_question_type not in ('choice', 'true_false') then
+      raise exception 'Unsupported question type at position %', v_question_position + 1;
+    end if;
+    if nullif(trim(v_question->>'text'), '') is null then
+      raise exception 'Question % is empty', v_question_position + 1;
+    end if;
+    if jsonb_typeof(v_question->'options') <> 'array' then
+      raise exception 'Question % options must be an array', v_question_position + 1;
+    end if;
+    v_option_count := jsonb_array_length(v_question->'options');
+    if v_option_count not between 2 and 8 then
+      raise exception 'Every question must have between two and eight options';
+    end if;
+    if v_question_type = 'true_false' and v_option_count <> 2 then
+      raise exception 'True/false questions must have exactly two options';
+    end if;
+    if (v_question->>'correct') is null or (v_question->>'correct') !~ '^\d+$' then
+      raise exception 'Question % has an invalid correct answer', v_question_position + 1;
+    end if;
+    v_correct_option := (v_question->>'correct')::integer;
+    if v_correct_option < 0 or v_correct_option >= v_option_count then
+      raise exception 'Correct answer is outside the available options for question %', v_question_position + 1;
+    end if;
+
     insert into public.quiz_questions (quiz_id, position, text, question_type)
     values (
       v_quiz_id, v_question_position, trim(v_question->>'text'),
-      coalesce(v_question->>'type', 'choice')
+      v_question_type
     ) returning id into v_question_id;
 
-    if jsonb_array_length(coalesce(v_question->'options', '[]'::jsonb)) not between 2 and 8 then
-      raise exception 'Every question must have between two and eight options';
-    end if;
-    if coalesce(v_question->>'type', 'choice') = 'true_false'
-       and jsonb_array_length(v_question->'options') <> 2 then
-      raise exception 'True/false questions must have exactly two options';
-    end if;
     for v_option, v_option_position in
       select value, (ordinality - 1)::integer from jsonb_array_elements(v_question->'options') with ordinality
     loop
+      if nullif(trim(v_option #>> '{}'), '') is null then
+        raise exception 'Question % contains an empty option', v_question_position + 1;
+      end if;
       insert into public.quiz_options (question_id, position, text)
       values (v_question_id, v_option_position, trim(v_option #>> '{}'));
     end loop;
     insert into public.quiz_answers (question_id, correct_option, explanation)
     values (
-      v_question_id, (v_question->>'correct')::integer,
+      v_question_id, v_correct_option,
       coalesce(v_question->>'explanation', '')
     );
   end loop;
@@ -242,18 +276,36 @@ declare
   v_score integer;
   v_percent numeric(5,2);
   v_review jsonb;
+  v_answer jsonb;
+  v_answer_position integer;
+  v_option_count integer;
 begin
   if not exists (select 1 from public.quizzes where id = p_quiz_id and status = 'published') then
     raise exception 'Published quiz not found';
   end if;
-  if char_length(trim(p_participant_name)) not between 1 and 80 then
+  if p_participant_name is null or char_length(trim(p_participant_name)) not between 1 and 80 then
     raise exception 'Participant name is invalid';
   end if;
 
   select count(*)::integer into v_total from public.quiz_questions where quiz_id = p_quiz_id;
-  if jsonb_array_length(coalesce(p_answers, '[]'::jsonb)) <> v_total then
+  if p_answers is null or jsonb_typeof(p_answers) <> 'array' or jsonb_array_length(p_answers) <> v_total then
     raise exception 'Answer count does not match question count';
   end if;
+  for v_answer, v_answer_position in
+    select value, (ordinality - 1)::integer from jsonb_array_elements(p_answers) with ordinality
+  loop
+    if v_answer = 'null'::jsonb then continue; end if;
+    if jsonb_typeof(v_answer) <> 'number' or (v_answer #>> '{}') !~ '^\d+$' then
+      raise exception 'Answer % is invalid', v_answer_position + 1;
+    end if;
+    select count(*)::integer into v_option_count
+    from public.quiz_options qo
+    join public.quiz_questions qq on qq.id = qo.question_id
+    where qq.quiz_id = p_quiz_id and qq.position = v_answer_position;
+    if (v_answer #>> '{}')::integer < 0 or (v_answer #>> '{}')::integer >= v_option_count then
+      raise exception 'Answer % is outside the available options', v_answer_position + 1;
+    end if;
+  end loop;
 
   select count(*)::integer into v_score
   from public.quiz_questions qq

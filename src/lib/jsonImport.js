@@ -1,5 +1,7 @@
-const uid = () => Math.random().toString(36).slice(2, 9);
+const uid = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 11);
 const letters = 'ABCDEFGH';
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_QUESTIONS = 500;
 
 function normalizeType(value, correctValue, options) {
   const type = String(value || '').toLowerCase().replaceAll('-', '_');
@@ -26,6 +28,7 @@ export function parseQuizJson(input) {
   if (!payload || typeof payload !== 'object') throw new Error('JSON phải là một object hoặc một mảng câu hỏi.');
   const source = payload.questions || payload.quiz?.questions;
   if (!Array.isArray(source)) throw new Error('Không tìm thấy mảng "questions" trong file JSON.');
+  if (source.length > MAX_QUESTIONS) throw new Error(`Mỗi file chỉ được chứa tối đa ${MAX_QUESTIONS} câu hỏi.`);
   const questions = [];
   const warnings = [];
 
@@ -46,6 +49,9 @@ export function parseQuizJson(input) {
     const needsReview = correct < 0 || correct >= options.length;
     questions.push({ id: uid(), text, type, options, correct: needsReview ? 0 : correct, explanation, needsReview });
     if (needsReview) warnings.push(`Câu ${index + 1} chưa nhận dạng được đáp án đúng.`);
+    if (new Set(options.map(option => option.toLocaleLowerCase('vi-VN'))).size !== options.length) {
+      warnings.push(`Câu ${index + 1} có lựa chọn bị trùng nội dung.`);
+    }
   });
   if (!questions.length) throw new Error('File JSON không có câu hỏi hợp lệ.');
   return {
@@ -60,6 +66,7 @@ export function parseQuizJson(input) {
 
 export async function importQuizJson(file) {
   if (!file?.name?.toLowerCase().endsWith('.json')) throw new Error('Hãy chọn file có định dạng .json.');
+  if (file.size > MAX_FILE_SIZE) throw new Error('File JSON vượt quá 5 MB. Hãy chia thành nhiều file nhỏ hơn.');
   try { return parseQuizJson(JSON.parse(await file.text())); }
   catch (error) {
     if (error instanceof SyntaxError) throw new Error('File JSON bị sai cú pháp. Hãy kiểm tra dấu phẩy, ngoặc và dấu nháy.');

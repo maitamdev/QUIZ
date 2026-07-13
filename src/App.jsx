@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, BarChart3, BookOpen, Check, CheckCircle2, ChevronDown,
-  CircleAlert, CircleHelp, Clock3, Copy, Crown, Edit3, Eye, FileText, FileUp, Flame, Globe2, Grid2X2, Home,
-  Layers3, Link2, ListChecks, Menu, MoreHorizontal, PartyPopper, Play, Plus,
+  ArrowLeft, ArrowRight, BarChart3, Check, CheckCircle2, ChevronDown,
+  CircleAlert, CircleHelp, Clock3, Copy, Download, Edit3, Eye, FileText, FileUp, Flame, Globe2, Grid2X2, Home,
+  Layers3, Link2, ListChecks, Menu, Play, Plus, RefreshCw,
   Database, LoaderCircle, LogOut, Rocket, Search, Settings, Share2, ShieldCheck,
   Sparkles, Star, Trash2, Trophy, Users, WandSparkles, X, Zap
 } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { checkAnswer, deleteQuiz, fetchOwnerQuizzes, fetchPublicQuiz, saveQuiz, submitAttempt } from './lib/quizApi';
+import { checkAnswer, deleteQuiz, fetchOwnerAttempts, fetchOwnerQuizzes, fetchPublicQuiz, saveQuiz, submitAttempt } from './lib/quizApi';
 import { importQuizJson } from './lib/jsonImport';
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+const uid = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 11);
 
 const colors = ['purple', 'orange', 'blue', 'green'];
 const answerLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -53,33 +53,39 @@ function useSupabaseSession() {
 
 function useQuizStore(userId) {
   const [quizzes, setQuizzes] = useState([]);
+  const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const reload = async () => {
-    if (!userId) { setQuizzes([]); return; }
-    setLoading(true); setError('');
-    try { setQuizzes(await fetchOwnerQuizzes(userId)); }
+    if (!userId) { setQuizzes([]); setAttempts([]); setLoaded(true); return; }
+    setLoading(true); setLoaded(false); setError('');
+    try {
+      const [nextQuizzes, nextAttempts] = await Promise.all([fetchOwnerQuizzes(userId), fetchOwnerAttempts()]);
+      setQuizzes(nextQuizzes); setAttempts(nextAttempts);
+    }
     catch (err) { setError(err.message || 'Không thể tải dữ liệu từ Supabase.'); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setLoaded(true); }
   };
   useEffect(() => { reload(); }, [userId]);
   const persist = async (quiz, status) => { const saved = await saveQuiz(quiz, status); await reload(); return saved; };
   const remove = async (id) => { await deleteQuiz(id); await reload(); };
-  return { quizzes, loading, error, reload, persist, remove };
+  return { quizzes, attempts, loading, loaded, error, reload, persist, remove };
 }
 
 const Logo = ({ onClick }) => (
-  <button className="logo" onClick={onClick} aria-label="Quizora trang chủ">
+  <button type="button" className="logo" onClick={onClick} aria-label="Quizora trang chủ">
     <span className="logo-mark"><Zap size={20} fill="currentColor" /></span><span>quizora</span>
   </button>
 );
 
 function PublicNav({ go, isLoggedIn }) {
   const [open, setOpen] = useState(false);
+  const scrollTo = id => { setOpen(false); document.querySelector(id)?.scrollIntoView({ behavior:'smooth' }); };
   return <header className="public-nav wrap">
     <Logo onClick={() => go('/')} />
     <nav className={open ? 'nav-links open' : 'nav-links'}>
-      <a href="#features">Tính năng</a><a href="#how">Cách hoạt động</a><a href="#reviews">Cộng đồng</a>
+      <button onClick={()=>scrollTo('#features')}>Tính năng</button><button onClick={()=>scrollTo('#how')}>Cách hoạt động</button><button onClick={()=>scrollTo('#features')}>Cộng đồng</button>
     </nav>
     <div className="nav-actions"><button className="btn ghost hide-mobile" onClick={() => go('/admin')}>{isLoggedIn ? 'Dashboard' : 'Đăng nhập'}</button><button className="btn primary" onClick={() => go(isLoggedIn ? '/admin' : '/admin/new')}>{isLoggedIn ? 'Quản lý quiz' : 'Tạo quiz miễn phí'} <ArrowRight size={17}/></button></div>
     <button className="icon-btn mobile-menu" onClick={() => setOpen(!open)}>{open ? <X/> : <Menu/>}</button>
@@ -124,61 +130,141 @@ function Landing({ go, isLoggedIn }) {
         </div></section>
       <section className="cta wrap"><div><span className="cta-stars">✦ ✦ ✦</span><h2>Sẵn sàng biến giờ học<br/>thành giờ chơi?</h2><p>Hoàn toàn miễn phí để bắt đầu. Không cần thẻ tín dụng.</p><button className="btn dark big" onClick={() => go('/admin/new')}>Tạo quiz miễn phí <Sparkles size={18}/></button></div></section>
     </main>
-    <footer className="footer wrap"><Logo onClick={() => go('/')}/><span>© 2026 Quizora. Made with 💜 for learners.</span><div><a href="#features">Tính năng</a><a href="#how">Hướng dẫn</a><a href="#admin">Admin</a></div></footer>
+    <footer className="footer wrap"><Logo onClick={() => go('/')}/><span>© 2026 Quizora. Made with 💜 for learners.</span><div><button onClick={()=>document.querySelector('#features')?.scrollIntoView({behavior:'smooth'})}>Tính năng</button><button onClick={()=>document.querySelector('#how')?.scrollIntoView({behavior:'smooth'})}>Hướng dẫn</button><button onClick={()=>go('/admin')}>Admin</button></div></footer>
   </div>;
 }
 
 function AdminShell({ go, children, active = 'dashboard', user }) {
   const [collapsed, setCollapsed] = useState(false);
+  const userLabel = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Quản trị viên';
+  const initials = userLabel.slice(0, 2).toUpperCase();
+  const navItems = [
+    { id: 'dashboard', label: 'Tổng quan', icon: <Grid2X2/>, path: '/admin' },
+    { id: 'quizzes', label: 'Bộ câu hỏi', icon: <ListChecks/>, path: '/admin/quizzes' },
+    { id: 'results', label: 'Kết quả', icon: <BarChart3/>, path: '/admin/results' },
+    { id: 'participants', label: 'Người tham gia', icon: <Users/>, path: '/admin/participants' }
+  ];
   return <div className={collapsed ? 'admin-shell collapsed' : 'admin-shell'}>
     <aside className="sidebar">
       <div className="sidebar-head"><Logo onClick={() => go('/')}/><button onClick={() => setCollapsed(!collapsed)} className="collapse-btn"><Menu size={19}/></button></div>
-      <nav><button className={active === 'dashboard' ? 'active':''} onClick={() => go('/admin')}><Grid2X2/><span>Tổng quan</span></button><button className={active === 'quizzes' ? 'active':''} onClick={() => go('/admin')}><ListChecks/><span>Bộ câu hỏi</span></button><button><BarChart3/><span>Kết quả</span></button><button><Users/><span>Người tham gia</span></button></nav>
-      <div className="sidebar-bottom"><button><CircleHelp/><span>Trợ giúp</span></button><button onClick={() => supabase.auth.signOut()}><LogOut/><span>Đăng xuất</span></button><div className="user-chip"><span className="user-avatar">AD</span><span><b>Admin</b><small>{user?.email || 'Quản trị viên'}</small></span><ChevronDown size={16}/></div></div>
+      <nav>{navItems.map(item=><button key={item.id} className={active === item.id ? 'active':''} onClick={() => go(item.path)}>{item.icon}<span>{item.label}</span></button>)}</nav>
+      <div className="sidebar-bottom"><button onClick={()=>go('/')}><CircleHelp/><span>Trợ giúp</span></button><button onClick={() => supabase.auth.signOut()}><LogOut/><span>Đăng xuất</span></button><div className="user-chip"><span className="user-avatar">{initials}</span><span><b>{userLabel}</b><small>{user?.email || 'Quản trị viên'}</small></span><ChevronDown size={16}/></div></div>
     </aside>
     <main className="admin-main">{children}</main>
+    <nav className="mobile-admin-nav" aria-label="Điều hướng quản trị">{navItems.map(item=><button key={item.id} className={active === item.id ? 'active':''} onClick={() => go(item.path)}>{item.icon}<span>{item.label}</span></button>)}</nav>
   </div>;
 }
 
 function StatCard({ icon, label, value, trend, tone }) {
-  return <article className="stat-card"><span className={`stat-icon ${tone}`}>{icon}</span><div><span>{label}</span><strong>{value}</strong><small className={trend?.startsWith('+') ? 'up' : ''}>{trend}</small></div></article>;
+  return <article className="stat-card"><span className={`stat-icon ${tone}`}>{icon}</span><div><span>{label}</span><strong>{value}</strong>{trend&&<small className={trend?.startsWith('+') ? 'up' : ''}>{trend}</small>}</div></article>;
 }
 
 function ShareModal({ quiz, onClose }) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState('');
   const url = `${window.location.origin}${window.location.pathname}#/quiz/${quiz.id}`;
-  const copy = async () => { try { await navigator.clipboard.writeText(url); } catch {} setCopied(true); setTimeout(() => setCopied(false), 1800); };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setCopyError(''); setTimeout(() => setCopied(false), 1800); }
+    catch { setCopyError('Trình duyệt chặn sao chép tự động. Hãy chọn và sao chép đường link bên trên.'); }
+  };
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="share-modal" onMouseDown={e => e.stopPropagation()}>
     <button className="modal-close" onClick={onClose}><X/></button><span className="share-icon"><Share2/></span><h2>Quiz đã sẵn sàng!</h2><p>Chia sẻ đường link bên dưới để mọi người bắt đầu làm bài.</p>
     <div className="share-quiz"><span className={`quiz-emoji ${quiz.color}`}>{quiz.emoji}</span><div><b>{quiz.title}</b><small>{quiz.questions.length} câu hỏi · {quiz.timeLimit} giây/câu</small></div></div>
     <label className="link-label">LINK THAM GIA</label><div className="copy-field"><Link2/><input readOnly value={url}/><button onClick={copy}>{copied ? <Check/> : <Copy/>}{copied ? 'Đã chép' : 'Sao chép'}</button></div>
+    {copyError&&<div className="data-error">{copyError}</div>}
     <div className="share-hint"><ShieldCheck/><span>Người tham gia không cần đăng nhập để làm bài</span></div>
     <button className="btn primary full" onClick={() => { window.open(url, '_blank'); }}><Eye size={18}/> Xem trang người làm bài</button>
   </div></div>;
 }
 
-function Dashboard({ go, quizzes, onDelete, loading, error, user }) {
+function downloadQuizJson(quiz) {
+  const payload = {
+    title: quiz.title, description: quiz.description, emoji: quiz.emoji,
+    questions: quiz.questions.map(question => ({
+      text: question.text, type: question.type, options: question.options,
+      correct: answerLetters[question.correct], explanation: question.explanation || ''
+    }))
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = `${quiz.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'quizora'}.json`;
+  link.click(); URL.revokeObjectURL(url);
+}
+
+function Dashboard({ go, quizzes, attempts, onDelete, onReload, loading, error, user, active = 'dashboard' }) {
   const [shareQuiz, setShareQuiz] = useState(null);
   const [query, setQuery] = useState('');
   const [actionError, setActionError] = useState('');
   const filtered = quizzes.filter(q => q.title.toLowerCase().includes(query.toLowerCase()));
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'bạn';
+  const today = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+  const average = attempts.length ? Math.round(attempts.reduce((sum,item)=>sum+(item.score/item.total*100),0)/attempts.length) : 0;
+  const participantCount = new Set(attempts.map(item=>item.participantName.trim().toLocaleLowerCase('vi-VN'))).size;
   const remove = async (id) => { if (!window.confirm('Bạn muốn xóa bộ câu hỏi này?')) return; try { setActionError(''); await onDelete(id); } catch (err) { setActionError(err.message); } };
-  return <AdminShell go={go} user={user}>
-    <header className="admin-top"><div><span>Không gian làm việc /</span><b>Tổng quan</b></div><button className="notification">●</button></header>
+  return <AdminShell go={go} user={user} active={active}>
+    <header className="admin-top"><div><span>Không gian làm việc /</span><b>Tổng quan</b></div><button className="notification refresh-btn" disabled={loading} onClick={onReload} aria-label="Làm mới dữ liệu"><RefreshCw className={loading?'spin':''}/></button></header>
     <div className="admin-content">
-      <section className="welcome"><div><p>Thứ Ba, 14 tháng 7</p><h1>Chào buổi sáng, Minh! <span>👋</span></h1><small>Sẵn sàng tạo nên một buổi học thật thú vị chưa?</small></div><button className="btn primary big" onClick={() => go('/admin/new')}><Plus/> Tạo bộ câu hỏi</button></section>
-      <section className="stats-grid"><StatCard tone="purple" icon={<Layers3/>} label="Tổng bộ câu hỏi" value={quizzes.length} trend="+2 tháng này"/><StatCard tone="orange" icon={<Play/>} label="Lượt tham gia" value={quizzes.reduce((a,q)=>a+q.plays,0).toLocaleString('vi-VN')} trend="+18.4% so với tháng trước"/><StatCard tone="blue" icon={<BarChart3/>} label="Điểm trung bình" value={`${Math.round(quizzes.filter(q=>q.average).reduce((a,q)=>a+q.average,0)/(quizzes.filter(q=>q.average).length || 1))}%`} trend="+3.2% so với tháng trước"/><StatCard tone="green" icon={<Trophy/>} label="Tỉ lệ hoàn thành" value="91%" trend="+5.1% so với tháng trước"/></section>
+      <section className="welcome"><div><p>{today}</p><h1>Xin chào, {displayName}! <span>👋</span></h1><small>Dữ liệu dưới đây được tính trực tiếp từ các lượt làm bài.</small></div><button className="btn primary big" onClick={() => go('/admin/new')}><Plus/> Tạo bộ câu hỏi</button></section>
+      <section className="stats-grid"><StatCard tone="purple" icon={<Layers3/>} label="Tổng bộ câu hỏi" value={quizzes.length} trend={`${quizzes.filter(q=>q.status==='published').length} đã xuất bản`}/><StatCard tone="orange" icon={<Play/>} label="Lượt hoàn thành" value={attempts.length.toLocaleString('vi-VN')} trend="Lưu thật trên Supabase"/><StatCard tone="blue" icon={<BarChart3/>} label="Điểm trung bình" value={`${average}%`} trend={attempts.length?'Tính trên toàn bộ lượt làm':'Chưa có dữ liệu'}/><StatCard tone="green" icon={<Users/>} label="Người tham gia" value={participantCount.toLocaleString('vi-VN')} trend="Theo tên người làm bài"/></section>
       {(error || actionError) && <div className="data-error">{error || actionError}</div>}
-      <section className="dashboard-panel"><div className="panel-head"><div><h2>Bộ câu hỏi của bạn</h2><p>Dữ liệu được đồng bộ trực tiếp từ Supabase.</p></div><div className="panel-tools"><label className="search"><Search/><input placeholder="Tìm bộ câu hỏi..." value={query} onChange={e=>setQuery(e.target.value)}/></label><button className="icon-btn"><MoreHorizontal/></button></div></div>
+      <section className="dashboard-panel"><div className="panel-head"><div><h2>Bộ câu hỏi của bạn</h2><p>Dữ liệu được đồng bộ trực tiếp từ Supabase.</p></div><div className="panel-tools"><label className="search"><Search/><input placeholder="Tìm bộ câu hỏi..." value={query} onChange={e=>setQuery(e.target.value)}/></label></div></div>
         <div className="quiz-table"><div className="table-header"><span>BỘ CÂU HỎI</span><span>TRẠNG THÁI</span><span>LƯỢT CHƠI</span><span>ĐIỂM TB</span><span>NGÀY TẠO</span><span></span></div>
-          {filtered.map(quiz => <div className="table-row" key={quiz.id}><div className="quiz-name"><span className={`quiz-emoji ${quiz.color}`}>{quiz.emoji}</span><span><b>{quiz.title}</b><small>{quiz.questions.length} câu hỏi · {quiz.timeLimit} giây/câu</small></span></div><span><i className={`status ${quiz.status}`}/>{quiz.status === 'published' ? 'Đã xuất bản':'Bản nháp'}</span><b>{quiz.plays.toLocaleString('vi-VN')}</b><b>{quiz.average ? `${quiz.average}%`:'—'}</b><span>{quiz.createdAt}</span><div className="row-actions"><button title="Chia sẻ" onClick={() => setShareQuiz(quiz)}><Share2/></button><button title="Chỉnh sửa" onClick={() => go(`/admin/edit/${quiz.id}`)}><Edit3/></button><button title="Xóa" onClick={() => remove(quiz.id)}><Trash2/></button></div></div>)}
+          {filtered.map(quiz => <div className="table-row" key={quiz.id}><div className="quiz-name"><span className={`quiz-emoji ${quiz.color}`}>{quiz.emoji}</span><span><b>{quiz.title}</b><small>{quiz.questions.length} câu hỏi · {quiz.timeLimit} giây/câu</small></span></div><span><i className={`status ${quiz.status}`}/>{quiz.status === 'published' ? 'Đã xuất bản':'Bản nháp'}</span><b>{quiz.plays.toLocaleString('vi-VN')}</b><b>{quiz.average ? `${quiz.average}%`:'—'}</b><span>{quiz.createdAt}</span><div className="row-actions"><button title={quiz.status==='published'?'Chia sẻ':'Xuất bản để chia sẻ'} disabled={quiz.status!=='published'} onClick={() => setShareQuiz(quiz)}><Share2/></button><button title="Tải bản sao JSON" onClick={() => downloadQuizJson(quiz)}><Download/></button><button title="Chỉnh sửa" onClick={() => go(`/admin/edit/${quiz.id}`)}><Edit3/></button><button title="Xóa" onClick={() => remove(quiz.id)}><Trash2/></button></div></div>)}
           {loading && <div className="empty-state"><LoaderCircle className="spin"/><h3>Đang tải dữ liệu</h3><p>Quizora đang kết nối tới Supabase...</p></div>}
           {!loading && !filtered.length && <div className="empty-state"><Database/><h3>{query ? 'Không tìm thấy bộ câu hỏi' : 'Chưa có bộ câu hỏi nào'}</h3><p>{query ? 'Thử tìm bằng một từ khóa khác nhé.' : 'Tạo bộ đề đầu tiên, dữ liệu sẽ được lưu thật trên Supabase.'}</p>{!query&&<button className="btn primary" onClick={()=>go('/admin/new')}><Plus/> Tạo ngay</button>}</div>}
         </div>
       </section>
-      <section className="tip-banner"><span><Sparkles/></span><div><b>Mẹo nhỏ từ Quizora</b><p>Các bộ đề có từ 7–12 câu hỏi thường có tỉ lệ hoàn thành cao hơn 34%.</p></div><button>Tìm hiểu thêm <ArrowRight/></button></section>
+      <section className="tip-banner"><span><Sparkles/></span><div><b>Mẹo nhỏ từ Quizora</b><p>Thêm giải thích ngắn cho mỗi câu để người học hiểu ngay sau khi trả lời.</p></div><button onClick={()=>go('/admin/results')}>Xem kết quả thật <ArrowRight/></button></section>
     </div>{shareQuiz && <ShareModal quiz={shareQuiz} onClose={()=>setShareQuiz(null)}/>} 
   </AdminShell>;
+}
+
+function Analytics({ go, quizzes, attempts, user, mode = 'results', loading, error, onReload }) {
+  const [quizId, setQuizId] = useState('all');
+  const filtered = quizId === 'all' ? attempts : attempts.filter(item=>item.quizId===quizId);
+  const average = filtered.length ? Math.round(filtered.reduce((sum,item)=>sum+(item.score/item.total*100),0)/filtered.length) : 0;
+  const best = filtered.length ? Math.max(...filtered.map(item=>Math.round(item.score/item.total*100))) : 0;
+  const selectedQuiz = quizzes.find(item=>item.id===quizId);
+  const participantRows = useMemo(() => {
+    const groups = new Map();
+    filtered.forEach(item => {
+      const key = item.participantName.trim().toLocaleLowerCase('vi-VN');
+      const current = groups.get(key) || { name:item.participantName, attempts:0, percentages:[], lastAt:item.completedAt, lastLabel:item.completedLabel };
+      current.attempts += 1; current.percentages.push(item.score/item.total*100);
+      if (new Date(item.completedAt) > new Date(current.lastAt)) { current.lastAt=item.completedAt; current.lastLabel=item.completedLabel; }
+      groups.set(key,current);
+    });
+    return [...groups.values()].map(item=>({...item, average:Math.round(item.percentages.reduce((a,b)=>a+b,0)/item.percentages.length), best:Math.round(Math.max(...item.percentages))})).sort((a,b)=>b.average-a.average);
+  }, [filtered]);
+  const questionStats = useMemo(() => {
+    if (!selectedQuiz) return [];
+    const relevant = attempts.filter(item=>item.quizId===selectedQuiz.id);
+    return selectedQuiz.questions.map((question,index)=>{
+      const answered = relevant.filter(item=>item.answers[index]!==null&&item.answers[index]!==undefined);
+      const correct = answered.filter(item=>Number(item.answers[index])===question.correct).length;
+      return { index, text:question.text, answered:answered.length, rate:answered.length?Math.round(correct/answered.length*100):0 };
+    }).sort((a,b)=>a.rate-b.rate);
+  }, [attempts, selectedQuiz]);
+  const exportCsv = () => {
+    const escape = value => `"${String(value??'').replaceAll('"','""')}"`;
+    const rows = [['Người tham gia','Bộ câu hỏi','Điểm','Tổng câu','Tỉ lệ','Hoàn thành'],...filtered.map(item=>[item.participantName,item.quizTitle,item.score,item.total,`${Math.round(item.score/item.total*100)}%`,item.completedLabel])];
+    const blob = new Blob([`\ufeff${rows.map(row=>row.map(escape).join(',')).join('\n')}`],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='quizora-ket-qua.csv';link.click();URL.revokeObjectURL(url);
+  };
+  return <AdminShell go={go} active={mode} user={user}>
+    <header className="admin-top"><div><span>Không gian làm việc /</span><b>{mode==='participants'?'Người tham gia':'Kết quả'}</b></div><button className="notification refresh-btn" disabled={loading} onClick={onReload} aria-label="Làm mới dữ liệu"><RefreshCw className={loading?'spin':''}/></button></header>
+    <div className="admin-content analytics-page">
+      <section className="analytics-heading"><div><span className="eyebrow"><BarChart3/> DỮ LIỆU THỜI GIAN THỰC</span><h1>{mode==='participants'?'Hồ sơ người tham gia':'Hiệu quả các bộ câu hỏi'}</h1><p>{mode==='participants'?'Theo dõi số lượt làm, điểm trung bình và thành tích tốt nhất.':'Mỗi con số đều được tổng hợp từ bảng quiz_attempts trên Supabase.'}</p></div><div className="analytics-actions"><label className="quiz-filter">Bộ câu hỏi<select value={quizId} onChange={event=>setQuizId(event.target.value)}><option value="all">Tất cả bộ câu hỏi</option>{quizzes.map(quiz=><option key={quiz.id} value={quiz.id}>{quiz.title}</option>)}</select></label><button className="btn soft" disabled={!filtered.length} onClick={exportCsv}><Download/> Xuất CSV</button></div></section>
+      {error&&<div className="data-error">{error}</div>}
+      <section className="stats-grid analytics-stats"><StatCard tone="purple" icon={<Play/>} label="Lượt hoàn thành" value={filtered.length}/><StatCard tone="blue" icon={<BarChart3/>} label="Điểm trung bình" value={`${average}%`}/><StatCard tone="orange" icon={<Trophy/>} label="Điểm cao nhất" value={`${best}%`}/><StatCard tone="green" icon={<Users/>} label="Người tham gia" value={participantRows.length}/></section>
+      {loading?<div className="empty-state analytics-empty"><LoaderCircle className="spin"/><h3>Đang tải thống kê</h3></div>:mode==='participants'?<section className="analytics-panel"><div className="panel-head"><div><h2>Danh sách người tham gia</h2><p>Gộp các lượt làm có cùng tên, không phân biệt chữ hoa/thường.</p></div></div><div className="analytics-table"><div className="analytics-row header"><span>NGƯỜI THAM GIA</span><span>SỐ LƯỢT</span><span>ĐIỂM TB</span><span>TỐT NHẤT</span><span>GẦN NHẤT</span></div>{participantRows.map((item,index)=><div className="analytics-row" key={`${item.name}-${index}`}><div className="participant-cell"><span>{item.name.slice(0,2).toUpperCase()}</span><b>{item.name}</b></div><b>{item.attempts}</b><span className="score-badge">{item.average}%</span><b>{item.best}%</b><span>{item.lastLabel}</span></div>)}{!participantRows.length&&<AnalyticsEmpty/>}</div></section>:<div className="analytics-grid"><section className="analytics-panel"><div className="panel-head"><div><h2>Lượt làm gần đây</h2><p>{quizId==='all'?'Toàn bộ bộ câu hỏi':selectedQuiz?.title}</p></div></div><div className="attempt-list">{filtered.slice(0,12).map(item=><article key={item.id}><span className="attempt-avatar">{item.participantName.slice(0,2).toUpperCase()}</span><div><b>{item.participantName}</b><small>{item.quizTitle} · {item.completedLabel}</small></div><strong>{Math.round(item.score/item.total*100)}%</strong></article>)}{!filtered.length&&<AnalyticsEmpty/>}</div></section><section className="analytics-panel"><div className="panel-head"><div><h2>Câu hỏi cần cải thiện</h2><p>{selectedQuiz?'Xếp theo tỉ lệ trả lời đúng thấp nhất':'Chọn một bộ đề để phân tích từng câu.'}</p></div></div>{selectedQuiz?<div className="difficulty-list">{questionStats.slice(0,10).map(item=><article key={item.index}><div><b>Câu {item.index+1}</b><span>{item.text}</span><small>{item.answered} lượt trả lời</small></div><strong>{item.rate}%</strong><i><span style={{width:`${item.rate}%`}}/></i></article>)}</div>:<AnalyticsEmpty message="Chọn một bộ câu hỏi ở phía trên để xem câu khó."/>}</section></div>}
+    </div>
+  </AdminShell>;
+}
+
+function AnalyticsEmpty({ message='Chưa có lượt làm bài nào để thống kê.' }) {
+  return <div className="empty-state analytics-empty"><BarChart3/><h3>Chưa có dữ liệu</h3><p>{message}</p></div>;
 }
 
 const emptyQuestion = () => ({ id: uid(), text: '', type: 'choice', options: ['', '', '', ''], correct: 0, explanation: '' });
@@ -194,20 +280,28 @@ function JsonImportModal({ onClose, onImport }) {
     catch (err) { setError(err.message || 'Không thể đọc file JSON.'); }
     finally { setBusy(false); }
   };
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="import-modal" onMouseDown={event=>event.stopPropagation()}><button className="modal-close" onClick={onClose}><X/></button><span className="share-icon"><FileText/></span><h2>Nhập bộ câu hỏi JSON</h2><p>Upload một file <b>.json</b>, Quizora sẽ kiểm tra cấu trúc trước khi thêm vào bộ đề.</p><label className={file?'word-dropzone has-file':'word-dropzone'}><input type="file" accept=".json,application/json" onChange={event=>setFile(event.target.files?.[0]||null)}/>{file?<><CheckCircle2/><b>{file.name}</b><small>{Math.ceil(file.size/1024)} KB · Bấm để chọn file khác</small></>:<><FileUp/><b>Chọn file JSON</b><small>Hỗ trợ trắc nghiệm, Đúng/Sai và giải thích đáp án</small></>}</label><div className="word-format"><b>Cấu trúc ngắn gọn</b><pre>{`{\n  "title": "Bộ câu hỏi mẫu",\n  "questions": [\n    {\n      "text": "2 + 2 bằng mấy?",\n      "type": "choice",\n      "options": ["3", "4", "5"],\n      "correct": "B",\n      "explanation": "2 + 2 = 4"\n    }\n  ]\n}`}</pre><a className="template-link" href="/quiz-template.json" download><FileText/> Tải file JSON mẫu</a></div>{error&&<div className="data-error">{error}</div>}<div className="import-actions"><button className="btn soft" onClick={onClose}>Hủy</button><button className="btn primary" disabled={busy||!file} onClick={submit}>{busy?<LoaderCircle className="spin"/>:<FileUp/>} Nhập câu hỏi</button></div></div></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="import-modal" onMouseDown={event=>event.stopPropagation()}><button className="modal-close" aria-label="Đóng" onClick={onClose}><X/></button><span className="share-icon"><FileText/></span><h2>Nhập bộ câu hỏi JSON</h2><p>Upload một file <b>.json</b>, Quizora sẽ kiểm tra cấu trúc trước khi thêm vào bộ đề.</p><label className={file?'json-dropzone has-file':'json-dropzone'}><input type="file" accept=".json,application/json" onChange={event=>setFile(event.target.files?.[0]||null)}/>{file?<><CheckCircle2/><b>{file.name}</b><small>{Math.ceil(file.size/1024)} KB · Bấm để chọn file khác</small></>:<><FileUp/><b>Chọn file JSON</b><small>Tối đa 5 MB · Trắc nghiệm, Đúng/Sai và giải thích đáp án</small></>}</label><div className="json-format"><b>Cấu trúc ngắn gọn</b><pre>{`{\n  "title": "Bộ câu hỏi mẫu",\n  "questions": [\n    {\n      "text": "2 + 2 bằng mấy?",\n      "type": "choice",\n      "options": ["3", "4", "5"],\n      "correct": "B",\n      "explanation": "2 + 2 = 4"\n    }\n  ]\n}`}</pre><a className="template-link" href="/quiz-template.json" download><FileText/> Tải file JSON mẫu</a></div>{error&&<div className="data-error">{error}</div>}<div className="import-actions"><button className="btn soft" onClick={onClose}>Hủy</button><button className="btn primary" disabled={busy||!file} onClick={submit}>{busy?<LoaderCircle className="spin"/>:<FileUp/>} Nhập câu hỏi</button></div></div></div>;
 }
 
 function Editor({ go, quizzes, onSave, id, user }) {
   const existing = quizzes.find(q => q.id === id);
-  const [quiz, setQuiz] = useState(existing || { id: null, title: 'Bộ câu hỏi chưa đặt tên', description: '', emoji: '✨', color: 'purple', status: 'draft', plays: 0, average: 0, createdAt: new Date().toLocaleDateString('vi-VN'), timeLimit: 20, questions: [emptyQuestion()] });
+  const initialQuiz = existing || { id: null, title: 'Bộ câu hỏi chưa đặt tên', description: '', emoji: '✨', color: 'purple', status: 'draft', plays: 0, average: 0, createdAt: new Date().toLocaleDateString('vi-VN'), timeLimit: 20, questions: [emptyQuestion()] };
+  const [quiz, setQuiz] = useState(initialQuiz);
+  const savedSnapshot = useRef(JSON.stringify(initialQuiz));
   const [selected, setSelected] = useState(0);
   const [share, setShare] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [importOpen, setImportOpen] = useState(false);
-  const [importNotice, setImportNotice] = useState('');
+  const [importNotice, setImportNotice] = useState(null);
   const question = quiz.questions[selected];
+  const dirty = JSON.stringify(quiz) !== savedSnapshot.current;
+  useEffect(()=>{
+    const warn = event => { if (dirty) { event.preventDefault(); event.returnValue=''; } };
+    window.addEventListener('beforeunload',warn); return ()=>window.removeEventListener('beforeunload',warn);
+  },[dirty]);
+  const guardedGo = path => { if (!dirty || window.confirm('Bạn có thay đổi chưa lưu. Bạn vẫn muốn rời khỏi trang?')) go(path); };
   const setQuestion = (patch) => setQuiz(q => ({...q, questions: q.questions.map((x,i)=>i===selected?{...x,...patch}:x)}));
   const save = async (publish = false) => {
     const hasBlank = !quiz.title.trim() || quiz.questions.some(q => !q.text.trim() || q.options.length < 2 || q.options.length > 8 || q.options.some(option => !option.trim()));
@@ -216,7 +310,7 @@ function Editor({ go, quizzes, onSave, id, user }) {
     setSaving(true); setSaveError('');
     try {
       const final = await onSave(quiz, publish ? 'published' : quiz.status);
-      setQuiz(final); setSaved(true); setTimeout(()=>setSaved(false),1500); if (publish) setShare(true);
+      savedSnapshot.current=JSON.stringify(final); setQuiz(final); setSaved(true); setTimeout(()=>setSaved(false),1500); if (publish) setShare(true);
     } catch (err) { setSaveError(err.message || 'Không thể lưu dữ liệu lên Supabase.'); }
     finally { setSaving(false); }
   };
@@ -238,16 +332,17 @@ function Editor({ go, quizzes, onSave, id, user }) {
     const startIndex = replaceBlank ? 0 : quiz.questions.length;
     setQuiz(current=>({...current,title:meta.title&&(current.title==='Bộ câu hỏi chưa đặt tên'||!current.title.trim())?meta.title:current.title,description:meta.description||current.description,emoji:meta.emoji||current.emoji,questions:replaceBlank?questions:[...current.questions,...questions]}));
     setSelected(startIndex);
-    setImportNotice(`Đã nhập ${questions.length} câu hỏi${warnings.length?` · ${warnings.length} mục cần lưu ý`:''}.`);
+    setImportNotice({ message:`Đã nhập ${questions.length} câu hỏi${warnings.length?` · ${warnings.length} mục cần lưu ý`:''}.`, warnings });
   };
-  return <AdminShell go={go} active="quizzes" user={user}>
-    <header className="editor-top"><button className="back-btn" onClick={()=>go('/admin')}><ArrowLeft/></button><div className="editable-title"><input value={quiz.title} onChange={e=>setQuiz({...quiz,title:e.target.value})}/><span>{saved ? 'Đã lưu lên Supabase' : 'Chưa lưu thay đổi'}</span></div><div className="editor-actions"><button className="btn import-word-btn" onClick={()=>setImportOpen(true)}><FileUp/> Nhập JSON</button><button className="btn soft" disabled={saving} onClick={()=>save(false)}>{saving?<LoaderCircle className="spin"/>:saved?<Check/>:null} Lưu nháp</button><button className="btn primary" disabled={saving} onClick={()=>save(true)}><Rocket/> Xuất bản & lấy link</button></div></header>
+  return <AdminShell go={guardedGo} active="quizzes" user={user}>
+    <header className="editor-top"><button className="back-btn" aria-label="Quay lại" onClick={()=>guardedGo('/admin')}><ArrowLeft/></button><div className="editable-title"><input aria-label="Tên bộ câu hỏi" value={quiz.title} onChange={e=>setQuiz({...quiz,title:e.target.value})}/><span>{saved ? 'Đã lưu lên Supabase' : dirty ? 'Có thay đổi chưa lưu' : 'Đã đồng bộ'}</span></div><div className="editor-actions"><button className="btn import-json-btn" onClick={()=>setImportOpen(true)}><FileUp/> Nhập JSON</button><button className="btn soft" disabled={saving||!dirty} onClick={()=>save(false)}>{saving?<LoaderCircle className="spin"/>:saved?<Check/>:null} {quiz.status==='published'?'Lưu thay đổi':'Lưu nháp'}</button><button className="btn primary" disabled={saving} onClick={()=>save(true)}><Rocket/> Xuất bản & lấy link</button></div></header>
     <div className="editor-layout">
       <aside className="question-list"><div className="question-list-head"><b>Câu hỏi</b><span>{quiz.questions.length}</span></div><div className="question-scroll">{quiz.questions.map((q,i)=><button className={`${i===selected?'question-item active':'question-item'} ${q.needsReview?'needs-review':''}`} key={q.id} onClick={()=>setSelected(i)}><span>{q.needsReview?'!':i+1}</span><div><b>{q.text || 'Câu hỏi chưa có nội dung'}</b><small>{q.type==='true_false'?'Đúng / Sai':`Trắc nghiệm · ${q.options.length} lựa chọn`}</small></div><Trash2 onClick={e=>{e.stopPropagation();deleteQuestion(i)}}/></button>)}</div><button className="add-question" onClick={addQuestion}><Plus/> Thêm câu hỏi</button></aside>
       <main className="question-editor"><div className="editor-canvas">
           {saveError&&<div className="data-error">{saveError}</div>}
-          {importNotice&&<div className="import-notice"><CheckCircle2/><span>{importNotice}</span><button onClick={()=>setImportNotice('')}><X/></button></div>}
+          {importNotice&&<div className="import-notice detailed"><CheckCircle2/><span><b>{importNotice.message}</b>{importNotice.warnings?.length>0&&<small>{importNotice.warnings.slice(0,4).join(' · ')}{importNotice.warnings.length>4?'…':''}</small>}</span><button aria-label="Đóng thông báo" onClick={()=>setImportNotice(null)}><X/></button></div>}
           {question.needsReview&&<div className="review-warning"><CircleAlert/><span>Câu này được nhập từ JSON nhưng chưa nhận dạng được đáp án. Hãy chọn đáp án đúng.</span></div>}
+          <div className="mobile-question-nav"><button disabled={selected===0} onClick={()=>setSelected(value=>Math.max(0,value-1))}><ArrowLeft/></button><label><span>Câu hỏi</span><select value={selected} onChange={event=>setSelected(Number(event.target.value))}>{quiz.questions.map((item,index)=><option value={index} key={item.id}>Câu {index+1}: {item.text||'Chưa có nội dung'}</option>)}</select></label><button disabled={selected===quiz.questions.length-1} onClick={()=>setSelected(value=>Math.min(quiz.questions.length-1,value+1))}><ArrowRight/></button></div>
           <div className="editor-meta"><span>CÂU {selected+1}</span><div className="editor-meta-actions"><div className="question-type-switch"><button className={question.type!=='true_false'?'active':''} onClick={()=>setQuestionType('choice')}>Trắc nghiệm</button><button className={question.type==='true_false'?'active':''} onClick={()=>setQuestionType('true_false')}>Đúng / Sai</button></div><label><Clock3/> <select value={quiz.timeLimit} onChange={e=>setQuiz({...quiz,timeLimit:Number(e.target.value)})}><option value="10">10 giây</option><option value="20">20 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select></label></div></div>
           <textarea className="question-input" value={question.text} onChange={e=>setQuestion({text:e.target.value})} placeholder="Nhập nội dung câu hỏi của bạn..." rows="2"/>
           <p className="answer-label">{question.type==='true_false'?'CHỌN ĐÚNG HOẶC SAI':'CÁC LỰA CHỌN'} <span>Chọn dấu tích cho đáp án đúng</span></p>
@@ -255,7 +350,7 @@ function Editor({ go, quizzes, onSave, id, user }) {
           <div className="answer-tools"><span>{question.type==='true_false'?'Hai lựa chọn được tạo tự động.':`${question.options.length}/8 lựa chọn`}</span>{question.type!=='true_false'&&<button disabled={question.options.length>=8} onClick={addOption}><Plus/> Thêm lựa chọn</button>}</div>
           <div className="explanation-box"><span><CircleHelp/></span><label><b>Giải thích đáp án</b><small>Hiển thị cho người chơi sau khi nộp bài.</small><textarea rows="3" value={question.explanation||''} onChange={e=>setQuestion({explanation:e.target.value})} placeholder="Ví dụ: Hà Nội là thủ đô của Việt Nam từ năm 1010..."/></label></div>
           <div className="quiz-settings"><h3><Settings/> Thiết lập bộ đề</h3><div className="settings-row"><label>Biểu tượng<input className="emoji-input" value={quiz.emoji} onChange={e=>setQuiz({...quiz,emoji:e.target.value})}/></label><label>Màu chủ đề<div className="color-picker">{colors.map(c=><button key={c} className={`${c} ${quiz.color===c?'active':''}`} onClick={()=>setQuiz({...quiz,color:c})}>{quiz.color===c&&<Check/>}</button>)}</div></label><label>Mô tả<input value={quiz.description} onChange={e=>setQuiz({...quiz,description:e.target.value})} placeholder="Mô tả ngắn về bộ đề"/></label></div></div>
-        </div><div className="editor-footer"><span><CheckCircle2/> Mọi thay đổi đã được ghi nhận</span><button className="btn primary" onClick={addQuestion}>Thêm câu tiếp theo <ArrowRight/></button></div></main>
+        </div><div className="editor-footer"><span>{dirty?<CircleAlert/>:<CheckCircle2/>} {dirty?'Có thay đổi chưa lưu':'Mọi thay đổi đã được lưu'}</span><button className="btn primary" onClick={addQuestion}>Thêm câu tiếp theo <ArrowRight/></button></div></main>
     </div>
     {share&&<ShareModal quiz={quiz} onClose={()=>setShare(false)}/>}
     {importOpen && (
@@ -287,6 +382,18 @@ function QuizPlayer({ quiz, go }) {
     if (time <= 0) { submitAnswer(null); return; }
     const timer = setTimeout(()=>setTime(t=>t-1),1000); return ()=>clearTimeout(timer);
   }, [phase,time,done,checking,index]);
+  useEffect(()=>{
+    if (phase!=='playing'||done||checking) return;
+    const handleKey = event => {
+      const key=event.key.toUpperCase();
+      const byLetter=answerLetters.indexOf(key);
+      const byNumber=/^[1-8]$/.test(event.key)?Number(event.key)-1:-1;
+      const optionIndex=byLetter>=0?byLetter:byNumber;
+      if(optionIndex>=0&&optionIndex<(question?.options?.length||0)){event.preventDefault();setSelected(optionIndex);}
+      if(event.key==='Enter'&&selected!==null){event.preventDefault();submitAnswer(selected);}
+    };
+    window.addEventListener('keydown',handleKey); return()=>window.removeEventListener('keydown',handleKey);
+  },[phase,done,checking,selected,index,question]);
   if (!quiz) return <NotFound go={go}/>;
   async function submitAnswer(answer = selected) {
     if(done||checking) return;
@@ -320,12 +427,14 @@ function QuizPlayer({ quiz, go }) {
   const resetGame = () => {setPhase('intro');setIndex(0);setAnswers(Array(quiz.questions.length).fill(null));setSelected(null);setDone(false);setResult(null);setFeedback(null);setPoints(0);setRetryQueue([]);setRound('main');setRetryPosition(0);setTime(quiz.timeLimit)};
   const score = Number(result?.score || 0);
   const percent = Math.round(Number(result?.percent || 0));
-  if (phase === 'intro') return <div className={`player-page player-${quiz.color}`}><div className="player-nav"><Logo onClick={()=>go('/')}/><button onClick={()=>go('/')}><X/></button></div><div className="intro-card"><span className={`intro-emoji ${quiz.color}`}>{quiz.emoji}</span><span className="public-badge"><Globe2/> BÀI TRẮC NGHIỆM CÔNG KHAI</span><h1>{quiz.title}</h1><p>{quiz.description}</p><div className="quiz-facts"><span><ListChecks/><b>{quiz.questions.length}</b><small>Câu hỏi</small></span><span><Clock3/><b>{quiz.timeLimit}s</b><small>Mỗi câu</small></span><span><Users/><b>{quiz.plays.toLocaleString('vi-VN')}</b><small>Lượt chơi</small></span></div><label className="name-field"><span>TÊN CỦA BẠN</span><input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&name.trim()&&setPhase('playing')} placeholder="Nhập tên để bắt đầu..."/></label><button className="btn primary huge full" disabled={!name.trim()} onClick={()=>setPhase('playing')}>Bắt đầu ngay <ArrowRight/></button><small className="privacy"><ShieldCheck/> Kết quả của bạn chỉ được chia sẻ với người tạo quiz</small></div><span className="deco deco-1">✦</span><span className="deco deco-2">●</span><span className="deco deco-3">▲</span></div>;
+  const resultLabel = percent>=80?'HOÀN THÀNH XUẤT SẮC!':percent>=50?'TIẾN BỘ RẤT TỐT!':'CỐ GẮNG THÊM MỘT CHÚT!';
+  const resultTitle = percent>=80?`Làm tốt lắm, ${name}!`:percent>=50?`Khá lắm, ${name}!`:`Đừng bỏ cuộc, ${name}!`;
+  if (phase === 'intro') return <div className={`player-page player-${quiz.color}`}><div className="player-nav"><Logo onClick={()=>go('/')}/><button aria-label="Đóng" onClick={()=>go('/')}><X/></button></div><div className="intro-card"><span className={`intro-emoji ${quiz.color}`}>{quiz.emoji}</span><span className="public-badge"><Globe2/> BÀI TRẮC NGHIỆM CÔNG KHAI</span><h1>{quiz.title}</h1><p>{quiz.description}</p><div className="quiz-facts"><span><ListChecks/><b>{quiz.questions.length}</b><small>Câu hỏi</small></span><span><Clock3/><b>{quiz.timeLimit}s</b><small>Mỗi câu</small></span><span><Users/><b>{quiz.plays.toLocaleString('vi-VN')}</b><small>Lượt chơi</small></span></div><label className="name-field"><span>TÊN CỦA BẠN</span><input autoFocus maxLength="80" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&name.trim()&&setPhase('playing')} placeholder="Nhập tên để bắt đầu..."/></label><button className="btn primary huge full" disabled={!name.trim()} onClick={()=>setPhase('playing')}>Bắt đầu ngay <ArrowRight/></button><small className="privacy"><ShieldCheck/> Kết quả của bạn chỉ được chia sẻ với người tạo quiz</small></div><span className="deco deco-1">✦</span><span className="deco deco-2">●</span><span className="deco deco-3">▲</span></div>;
   if (phase === 'submitting') return <LoadingScreen label="Đang chấm điểm trên Supabase..."/>;
   if (phase === 'submit-error') return <div className="not-found"><span><Database size={80}/></span><h1>Chưa thể gửi bài</h1><p>{submitError}</p><button className="btn primary" onClick={async()=>{setPhase('submitting');try{setResult(await submitAttempt(quiz.id,name,answers));setPhase('result')}catch(err){setSubmitError(err.message);setPhase('submit-error')}}}>Thử gửi lại</button></div>;
-  if (phase === 'result') return <div className="result-page"><div className="confetti c1">★</div><div className="confetti c2">●</div><div className="confetti c3">◆</div><div className="result-card expanded"><div className="result-trophy"><Trophy/></div><span className="result-label">HOÀN THÀNH XUẤT SẮC!</span><h1>Làm tốt lắm, {name}!</h1><p>Bạn đã hoàn thành “{quiz.title}”</p><div className="result-summary"><div className="score-ring" style={{'--score':`${percent*3.6}deg`}}><div><strong>{percent}%</strong><span>ĐIỂM SỐ</span></div></div><div className="result-stats"><span><CheckCircle2/><b>{score}</b><small>Đúng</small></span><span><X/><b>{quiz.questions.length-score}</b><small>Sai</small></span><span><Star/><b>{points.toLocaleString('vi-VN')}</b><small>Điểm game</small></span></div></div>{result?.review?.length>0&&<div className="answer-review"><div className="review-title"><h2>Xem lại đáp án</h2><span>{score}/{quiz.questions.length} câu đúng</span></div>{result.review.map((item,i)=>{const q=quiz.questions[item.position]||quiz.questions[i];const isCorrect=item.selected===item.correct;return <article className={isCorrect?'review-item correct':'review-item wrong'} key={item.position}><div className="review-question"><span>{item.position+1}</span><div><b>{q?.text}</b><small>{isCorrect?'Trả lời chính xác':'Cần xem lại'}</small></div>{isCorrect?<CheckCircle2/>:<X/>}</div><div className="review-answer"><span>Đáp án đúng</span><b>{answerLetters[item.correct]}. {q?.options?.[item.correct]}</b></div>{item.explanation&&<div className="review-explanation"><CircleHelp/><p>{item.explanation}</p></div>}</article>})}</div>}<div className="result-actions"><button className="btn soft big" onClick={resetGame}><Play/> Chơi lại</button><button className="btn primary big" onClick={()=>go('/')}><Home/> Về trang chủ</button></div></div></div>;
+  if (phase === 'result') return <div className="result-page"><div className="confetti c1">★</div><div className="confetti c2">●</div><div className="confetti c3">◆</div><div className="result-card expanded"><div className="result-trophy"><Trophy/></div><span className="result-label">{resultLabel}</span><h1>{resultTitle}</h1><p>Bạn đã hoàn thành “{quiz.title}”{retryQueue.length?` và ôn lại ${retryQueue.length} câu cần củng cố.`:'.'}</p><div className="result-summary"><div className="score-ring" style={{'--score':`${percent*3.6}deg`}}><div><strong>{percent}%</strong><span>ĐIỂM SỐ</span></div></div><div className="result-stats"><span><CheckCircle2/><b>{score}</b><small>Đúng</small></span><span><X/><b>{quiz.questions.length-score}</b><small>Sai</small></span><span><Star/><b>{points.toLocaleString('vi-VN')}</b><small>Điểm game</small></span></div></div>{result?.review?.length>0&&<div className="answer-review"><div className="review-title"><h2>Xem lại đáp án</h2><span>{score}/{quiz.questions.length} câu đúng</span></div>{result.review.map((item,i)=>{const q=quiz.questions[item.position]||quiz.questions[i];const isCorrect=item.selected===item.correct;return <article className={isCorrect?'review-item correct':'review-item wrong'} key={item.position}><div className="review-question"><span>{item.position+1}</span><div><b>{q?.text}</b><small>{isCorrect?'Trả lời chính xác':'Cần xem lại'}</small></div>{isCorrect?<CheckCircle2/>:<X/>}</div><div className="review-answer"><span>Đáp án đúng</span><b>{answerLetters[item.correct]}. {q?.options?.[item.correct]}</b></div>{item.explanation&&<div className="review-explanation"><CircleHelp/><p>{item.explanation}</p></div>}</article>})}</div>}<div className="result-actions"><button className="btn soft big" onClick={resetGame}><Play/> Chơi lại</button><button className="btn primary big" onClick={()=>go('/')}><Home/> Về trang chủ</button></div></div></div>;
   const progress = round==='main' ? (index+1)/quiz.questions.length*100 : (retryPosition+1)/Math.max(retryQueue.length,1)*100;
-  return <div className={`play-screen player-${quiz.color}`}><header className="play-header"><Logo onClick={()=>go('/')}/><div className="play-hud"><div className="points-pill"><Star fill="currentColor"/><span><b>{points.toLocaleString('vi-VN')}</b> điểm</span></div><div className="player-name"><span>{name.slice(0,2).toUpperCase()}</span><b>{name}</b></div></div><button onClick={()=>go('/')}><X/></button></header><div className="play-progress"><i style={{width:`${progress}%`}}/></div><main className="play-main"><div className="play-meta"><span>{round==='retry'?`ÔN LẠI ${retryPosition+1} / ${retryQueue.length}`:`CÂU HỎI ${index+1} / ${quiz.questions.length}`}</span><div className={time<=5?'countdown danger':'countdown'}><Clock3/><b>{time}</b><small>GIÂY</small></div>{round==='retry'&&<span className="retry-badge"><Flame/> Câu cần củng cố</span>}</div><h1>{question.text}</h1>{playError&&<div className="data-error">{playError}</div>}<div className="play-options">{question.options.map((opt,i)=>{let state=selected===i?'selected':'';if(done&&feedback&&!feedback.pending){if(i===feedback.correct)state='correct';else if(i===selected)state='wrong'}return <button key={i} disabled={done||checking} className={state} onClick={()=>setSelected(i)}><span>{answerLetters[i]}</span><b>{opt || `Đáp án ${answerLetters[i]}`}</b>{done&&feedback&&!feedback.pending&&i===feedback.correct?<CheckCircle2/>:selected===i?<CheckCircle2/>:null}</button>})}</div>{done&&feedback&&<div className={feedback.pending?'instant-feedback neutral':feedback.is_correct?'instant-feedback success':'instant-feedback error'}><span>{feedback.is_correct?<CheckCircle2/>:<CircleAlert/>}</span><div><b>{feedback.pending?'Cần nâng cấp database để xem đúng/sai ngay':feedback.is_correct?`Chính xác! +${feedback.earned} điểm`:'Chưa đúng — đã thêm vào vòng ôn lại'}</b><p>{feedback.explanation||`Đáp án đúng là ${answerLetters[feedback.correct]}. ${question.options[feedback.correct]}`}</p></div></div>}{done?<button className="btn next-btn ready" onClick={nextQuestion}>{round==='main'&&index===quiz.questions.length-1?(retryQueue.length?'Bắt đầu ôn lại':'Xem kết quả'):round==='retry'&&retryPosition===retryQueue.length-1?'Xem kết quả':'Câu tiếp theo'} <ArrowRight/></button>:<button className="btn next-btn" disabled={selected===null||checking} onClick={()=>submitAnswer()}>{checking?<LoaderCircle className="spin"/>:'Xác nhận đáp án'} <ArrowRight/></button>}</main></div>;
+  return <div className={`play-screen player-${quiz.color}`}><header className="play-header"><Logo onClick={()=>go('/')}/><div className="play-hud"><div className="points-pill"><Star fill="currentColor"/><span><b>{points.toLocaleString('vi-VN')}</b> điểm</span></div><div className="player-name"><span>{name.slice(0,2).toUpperCase()}</span><b>{name}</b></div></div><button aria-label="Thoát bài làm" onClick={()=>window.confirm('Bạn muốn thoát bài đang làm?')&&go('/')}><X/></button></header><div className="play-progress"><i style={{width:`${progress}%`}}/></div><main className="play-main"><div className="play-meta"><span>{round==='retry'?`ÔN LẠI ${retryPosition+1} / ${retryQueue.length}`:`CÂU HỎI ${index+1} / ${quiz.questions.length}`}</span><div className={time<=5?'countdown danger':'countdown'}><Clock3/><b>{time}</b><small>GIÂY</small></div>{round==='retry'&&<span className="retry-badge"><Flame/> Câu cần củng cố</span>}</div><h1>{question.text}</h1>{playError&&<div className="data-error">{playError}</div>}<div className="play-options">{question.options.map((opt,i)=>{let state=selected===i?'selected':'';if(done&&feedback&&!feedback.pending){if(i===feedback.correct)state='correct';else if(i===selected)state='wrong'}return <button key={i} aria-pressed={selected===i} disabled={done||checking} className={state} onClick={()=>setSelected(i)}><span>{answerLetters[i]}</span><b>{opt || `Đáp án ${answerLetters[i]}`}</b>{done&&feedback&&!feedback.pending&&i===feedback.correct?<CheckCircle2/>:selected===i?<CheckCircle2/>:null}</button>})}</div>{done&&feedback&&<div className={feedback.pending?'instant-feedback neutral':feedback.is_correct?'instant-feedback success':'instant-feedback error'}><span>{feedback.is_correct?<CheckCircle2/>:<CircleAlert/>}</span><div><b>{feedback.pending?'Cần nâng cấp database để xem đúng/sai ngay':feedback.is_correct?`Chính xác! +${feedback.earned} điểm`:round==='main'?'Chưa đúng — đã thêm vào vòng ôn lại':'Chưa đúng — hãy xem kỹ phần giải thích'}</b><p>{feedback.explanation||`Đáp án đúng là ${answerLetters[feedback.correct]}. ${question.options[feedback.correct]}`}</p></div></div>}{done?<button className="btn next-btn ready" onClick={nextQuestion}>{round==='main'&&index===quiz.questions.length-1?(retryQueue.length?'Bắt đầu ôn lại':'Xem kết quả'):round==='retry'&&retryPosition===retryQueue.length-1?'Xem kết quả':'Câu tiếp theo'} <ArrowRight/></button>:<button className="btn next-btn" disabled={selected===null||checking} onClick={()=>submitAnswer()}>{checking?<LoaderCircle className="spin"/>:'Xác nhận đáp án'} <ArrowRight/></button>}</main></div>;
 }
 
 function LoadingScreen({ label = 'Đang tải dữ liệu...' }) {
@@ -365,7 +474,7 @@ function AuthScreen({ go }) {
     const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}?auth=confirmed` } });
     setBusy(false); setMessage(error ? authMessage(error) : 'Đã gửi lại email xác nhận. Hãy kiểm tra cả thư rác/spam.');
   };
-  return <div className="auth-page"><div className="auth-side"><Logo onClick={()=>go('/')}/><div><span className="eyebrow light"><ShieldCheck/> ADMIN QUIZORA</span><h1>Tạo bài học<br/>khiến ai cũng<br/><em>muốn tham gia.</em></h1><p>Dữ liệu được bảo vệ bằng Supabase Auth và Row Level Security.</p></div><small>© 2026 Quizora</small></div><div className="auth-form-wrap"><form className="auth-form" onSubmit={submit}><span className="mobile-auth-logo"><Logo onClick={()=>go('/')}/></span><h2>{mode==='login'?'Chào mừng trở lại':'Tạo tài khoản admin'}</h2><p>{mode==='login'?'Đăng nhập để quản lý các bộ câu hỏi của bạn.':'Bắt đầu tạo và chia sẻ quiz với dữ liệu thật.'}</p>{message&&<div className="data-error">{message}</div>}{canResend&&<button className="auth-resend" type="button" disabled={busy} onClick={resend}>Gửi lại email xác nhận</button>}<label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@example.com"/></label><label>Mật khẩu<input type="password" required minLength="6" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Tối thiểu 6 ký tự"/></label><button className="btn primary huge full" disabled={busy}>{busy?<LoaderCircle className="spin"/>:null}{mode==='login'?'Đăng nhập':'Tạo tài khoản'} <ArrowRight/></button><div className="auth-switch">{mode==='login'?'Chưa có tài khoản?':'Đã có tài khoản?'} <button type="button" onClick={()=>{setMode(mode==='login'?'signup':'login');setMessage('');setCanResend(false)}}>{mode==='login'?'Đăng ký ngay':'Đăng nhập'}</button></div></form></div></div>;
+  return <div className="auth-page"><div className="auth-side"><Logo onClick={()=>go('/')}/><div><span className="eyebrow light"><ShieldCheck/> ADMIN QUIZORA</span><h1>Tạo bài học<br/>khiến ai cũng<br/><em>muốn tham gia.</em></h1><p>Dữ liệu được bảo vệ bằng Supabase Auth và Row Level Security.</p></div><small>© 2026 Quizora</small></div><div className="auth-form-wrap"><form className="auth-form" onSubmit={submit}><span className="mobile-auth-logo"><Logo onClick={()=>go('/')}/></span><h2>{mode==='login'?'Chào mừng trở lại':'Tạo tài khoản admin'}</h2><p>{mode==='login'?'Đăng nhập để quản lý các bộ câu hỏi của bạn.':'Bắt đầu tạo và chia sẻ quiz với dữ liệu thật.'}</p>{message&&<div className={/^Đã/.test(message)?'data-success':'data-error'}>{message}</div>}{canResend&&<button className="auth-resend" type="button" disabled={busy} onClick={resend}>Gửi lại email xác nhận</button>}<label>Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@example.com"/></label><label>Mật khẩu<input type="password" autoComplete={mode==='login'?'current-password':'new-password'} required minLength="6" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Tối thiểu 6 ký tự"/></label><button className="btn primary huge full" disabled={busy}>{busy?<LoaderCircle className="spin"/>:null}{mode==='login'?'Đăng nhập':'Tạo tài khoản'} <ArrowRight/></button><div className="auth-switch">{mode==='login'?'Chưa có tài khoản?':'Đã có tài khoản?'} <button type="button" onClick={()=>{setMode(mode==='login'?'signup':'login');setMessage('');setCanResend(false)}}>{mode==='login'?'Đăng ký ngay':'Đăng nhập'}</button></div></form></div></div>;
 }
 
 function PublicQuizRoute({ id, go }) {
@@ -397,10 +506,13 @@ export function App() {
     if (!isSupabaseConfigured) return <SetupScreen go={go}/>;
     if (authLoading) return <LoadingScreen label="Đang kiểm tra phiên đăng nhập..."/>;
     if (!session) return <AuthScreen go={go}/>;
-    if (route === '/admin') return <Dashboard go={go} quizzes={store.quizzes} onDelete={store.remove} loading={store.loading} error={store.error} user={session.user}/>;
+    if (route === '/admin') return <Dashboard go={go} quizzes={store.quizzes} attempts={store.attempts} onDelete={store.remove} onReload={store.reload} loading={store.loading} error={store.error} user={session.user}/>;
+    if (route === '/admin/quizzes') return <Dashboard go={go} quizzes={store.quizzes} attempts={store.attempts} onDelete={store.remove} onReload={store.reload} loading={store.loading} error={store.error} user={session.user} active="quizzes"/>;
+    if (route === '/admin/results') return <Analytics go={go} quizzes={store.quizzes} attempts={store.attempts} onReload={store.reload} loading={store.loading} error={store.error} user={session.user} mode="results"/>;
+    if (route === '/admin/participants') return <Analytics go={go} quizzes={store.quizzes} attempts={store.attempts} onReload={store.reload} loading={store.loading} error={store.error} user={session.user} mode="participants"/>;
     if (route === '/admin/new') return <Editor go={go} quizzes={store.quizzes} onSave={store.persist} user={session.user}/>;
     if (route.startsWith('/admin/edit/')) {
-      if (store.loading) return <LoadingScreen label="Đang tải bộ câu hỏi..."/>;
+      if (!store.loaded || store.loading) return <LoadingScreen label="Đang tải bộ câu hỏi..."/>;
       const id = route.split('/').pop();
       if (!store.quizzes.some(q=>q.id===id)) return <NotFound go={go}/>;
       return <Editor go={go} quizzes={store.quizzes} onSave={store.persist} user={session.user} id={id}/>;

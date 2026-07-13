@@ -1,0 +1,10 @@
+{
+  "name": "Quizora",
+  "short_name": "Quizora",
+  "description": "Tạo, chia sẻ và làm bài trắc nghiệm trực tuyến.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f6fa",
+  "theme_color": "#6c4bff",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
