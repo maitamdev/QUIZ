@@ -31,8 +31,20 @@ function useSupabaseSession() {
   const [loading, setLoading] = useState(isSupabaseConfigured);
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const finishAuthRedirect = (nextSession) => {
+      const params = new URLSearchParams(window.location.search);
+      const isEmailCallback = params.get('auth') === 'confirmed';
+      const isTokenCallback = /access_token=|refresh_token=|type=signup/.test(window.location.hash);
+      if (nextSession && (isEmailCallback || isTokenCallback)) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.hash = '/admin';
+      }
+    };
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); finishAuthRedirect(data.session); });
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession); setLoading(false);
+      if (event === 'SIGNED_IN') finishAuthRedirect(nextSession);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
   return { session, loading };
@@ -61,21 +73,21 @@ const Logo = ({ onClick }) => (
   </button>
 );
 
-function PublicNav({ go }) {
+function PublicNav({ go, isLoggedIn }) {
   const [open, setOpen] = useState(false);
   return <header className="public-nav wrap">
     <Logo onClick={() => go('/')} />
     <nav className={open ? 'nav-links open' : 'nav-links'}>
       <a href="#features">Tính năng</a><a href="#how">Cách hoạt động</a><a href="#reviews">Cộng đồng</a>
     </nav>
-    <div className="nav-actions"><button className="btn ghost hide-mobile" onClick={() => go('/admin')}>Đăng nhập</button><button className="btn primary" onClick={() => go('/admin')}>Tạo quiz miễn phí <ArrowRight size={17}/></button></div>
+    <div className="nav-actions"><button className="btn ghost hide-mobile" onClick={() => go('/admin')}>{isLoggedIn ? 'Dashboard' : 'Đăng nhập'}</button><button className="btn primary" onClick={() => go(isLoggedIn ? '/admin' : '/admin/new')}>{isLoggedIn ? 'Quản lý quiz' : 'Tạo quiz miễn phí'} <ArrowRight size={17}/></button></div>
     <button className="icon-btn mobile-menu" onClick={() => setOpen(!open)}>{open ? <X/> : <Menu/>}</button>
   </header>;
 }
 
-function Landing({ go }) {
+function Landing({ go, isLoggedIn }) {
   return <div className="landing">
-    <PublicNav go={go}/>
+    <PublicNav go={go} isLoggedIn={isLoggedIn}/>
     <main>
       <section className="hero wrap">
         <div className="hero-copy">
@@ -261,7 +273,7 @@ function AuthScreen({ go }) {
   };
   const submit = async (event) => {
     event.preventDefault(); setBusy(true); setMessage(''); setCanResend(false);
-    const emailRedirectTo = `${window.location.origin}${window.location.pathname}#/admin`;
+    const emailRedirectTo = `${window.location.origin}${window.location.pathname}?auth=confirmed`;
     const action = mode === 'login'
       ? supabase.auth.signInWithPassword({ email, password })
       : supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
@@ -272,7 +284,7 @@ function AuthScreen({ go }) {
   const resend = async () => {
     if (!email) { setMessage('Nhập email cần xác nhận trước.'); return; }
     setBusy(true); setMessage('');
-    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}#/admin` } });
+    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}?auth=confirmed` } });
     setBusy(false); setMessage(error ? authMessage(error) : 'Đã gửi lại email xác nhận. Hãy kiểm tra cả thư rác/spam.');
   };
   return <div className="auth-page"><div className="auth-side"><Logo onClick={()=>go('/')}/><div><span className="eyebrow light"><ShieldCheck/> ADMIN QUIZORA</span><h1>Tạo bài học<br/>khiến ai cũng<br/><em>muốn tham gia.</em></h1><p>Dữ liệu được bảo vệ bằng Supabase Auth và Row Level Security.</p></div><small>© 2026 Quizora</small></div><div className="auth-form-wrap"><form className="auth-form" onSubmit={submit}><span className="mobile-auth-logo"><Logo onClick={()=>go('/')}/></span><h2>{mode==='login'?'Chào mừng trở lại':'Tạo tài khoản admin'}</h2><p>{mode==='login'?'Đăng nhập để quản lý các bộ câu hỏi của bạn.':'Bắt đầu tạo và chia sẻ quiz với dữ liệu thật.'}</p>{message&&<div className="data-error">{message}</div>}{canResend&&<button className="auth-resend" type="button" disabled={busy} onClick={resend}>Gửi lại email xác nhận</button>}<label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@example.com"/></label><label>Mật khẩu<input type="password" required minLength="6" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Tối thiểu 6 ký tự"/></label><button className="btn primary huge full" disabled={busy}>{busy?<LoaderCircle className="spin"/>:null}{mode==='login'?'Đăng nhập':'Tạo tài khoản'} <ArrowRight/></button><div className="auth-switch">{mode==='login'?'Chưa có tài khoản?':'Đã có tài khoản?'} <button type="button" onClick={()=>{setMode(mode==='login'?'signup':'login');setMessage('');setCanResend(false)}}>{mode==='login'?'Đăng ký ngay':'Đăng nhập'}</button></div></form></div></div>;
@@ -298,7 +310,7 @@ export function App() {
   const [route, go] = useHashRoute();
   const { session, loading: authLoading } = useSupabaseSession();
   const store = useQuizStore(session?.user?.id);
-  if (route === '/') return <Landing go={go}/>;
+  if (route === '/') return <Landing go={go} isLoggedIn={Boolean(session)}/>;
   if (route.startsWith('/quiz/')) {
     if (!isSupabaseConfigured) return <SetupScreen go={go}/>;
     return <PublicQuizRoute id={route.split('?')[0].split('/').pop()} go={go}/>;
