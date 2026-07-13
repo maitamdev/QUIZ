@@ -1,0 +1,322 @@
+{
+  "title": "45 câu trắc nghiệm HTML trọng tâm",
+  "description": "Ôn thi Phát triển ứng dụng Web (IT093IU): HTML cơ bản, liên kết, ảnh, bảng, frame, iframe, div, biểu mẫu và JSP.",
+  "emoji": "🌐",
+  "questions": [
+    {
+      "text": "HTML là viết tắt của cụm từ nào?",
+      "type": "choice",
+      "options": ["HyperText Markup Language", "High Transfer Machine Language", "Hyperlink Text Management Logic", "Home Tool Markup Language"],
+      "correct": "A",
+      "explanation": "HTML là viết tắt của HyperText Markup Language, ngôn ngữ đánh dấu siêu văn bản."
+    },
+    {
+      "text": "Vai trò nền tảng của HTML trong phát triển web là gì?",
+      "type": "choice",
+      "options": ["Quản trị cơ sở dữ liệu", "Tạo cấu trúc và nội dung trang web", "Mã hóa kết nối mạng", "Biên dịch chương trình Java"],
+      "correct": "B",
+      "explanation": "HTML mô tả cấu trúc và nội dung của trang web bằng các phần tử đánh dấu."
+    },
+    {
+      "text": "World Wide Web được mô tả đúng nhất là gì?",
+      "type": "choice",
+      "options": ["Một mạng tách biệt hoàn toàn với Internet", "Tập hợp máy tính trên Internet hỗ trợ HTTP", "Một trình duyệt web", "Một ngôn ngữ lập trình"],
+      "correct": "B",
+      "explanation": "World Wide Web là hệ thống tài nguyên và máy tính liên kết trên Internet, được truy cập chủ yếu qua HTTP."
+    },
+    {
+      "text": "HTTP có chức năng chính nào?",
+      "type": "choice",
+      "options": ["Định dạng ảnh", "Cho phép trình duyệt yêu cầu tài liệu từ máy chủ web", "Tạo bảng trong HTML", "Lưu mật khẩu trong trình duyệt"],
+      "correct": "B",
+      "explanation": "HTTP là giao thức trao đổi yêu cầu và phản hồi giữa trình duyệt với máy chủ web."
+    },
+    {
+      "text": "Khi các thẻ HTML lồng nhau, quy tắc đóng thẻ đúng là gì?",
+      "type": "choice",
+      "options": ["Đóng thẻ ngoài trước", "Đóng thẻ được mở gần nhất trước", "Thứ tự đóng không quan trọng", "Không cần đóng thẻ"],
+      "correct": "B",
+      "explanation": "Các thẻ lồng nhau tuân theo nguyên tắc vào sau ra trước: thẻ mở gần nhất phải được đóng trước."
+    },
+    {
+      "text": "Phần tử nào chứa tiêu đề xuất hiện trên tab trình duyệt?",
+      "type": "choice",
+      "options": ["BODY", "META", "TITLE", "H1"],
+      "correct": "C",
+      "explanation": "Phần tử TITLE nằm trong HEAD và quy định tiêu đề hiển thị trên tab trình duyệt."
+    },
+    {
+      "text": "Nội dung văn bản và hình ảnh hiển thị trên trang thường đặt ở đâu?",
+      "type": "choice",
+      "options": ["Trong BODY", "Trong DOCTYPE", "Trong TITLE", "Sau thẻ HTML đóng"],
+      "correct": "A",
+      "explanation": "BODY chứa nội dung chính được trình duyệt hiển thị trong vùng trang web."
+    },
+    {
+      "text": "Khai báo nào cho trình duyệt biết loại tài liệu HTML?",
+      "type": "choice",
+      "options": ["<META>", "<!DOCTYPE html>", "<TITLE>", "<BASE>"],
+      "correct": "B",
+      "explanation": "<!DOCTYPE html> khai báo tài liệu sử dụng chuẩn HTML5."
+    },
+    {
+      "text": "Phần tử nào bắt buộc phải có trong HEAD theo nội dung bài học?",
+      "type": "choice",
+      "options": ["BGSOUND", "BASE", "TITLE", "SCRIPT"],
+      "correct": "C",
+      "explanation": "TITLE là phần tử thiết yếu trong HEAD để xác định tiêu đề tài liệu."
+    },
+    {
+      "text": "Thông tin do META cung cấp thường được hiển thị ở đâu?",
+      "type": "choice",
+      "options": ["Trong nội dung BODY", "Trên thanh địa chỉ", "Không hiển thị trực tiếp trên trang", "Trong mọi thẻ H1"],
+      "correct": "C",
+      "explanation": "META cung cấp siêu dữ liệu cho trình duyệt và công cụ tìm kiếm, thường không hiển thị trực tiếp."
+    },
+    {
+      "text": "Thẻ nào tạo tiêu đề cấp lớn nhất?",
+      "type": "choice",
+      "options": ["<H1>", "<H6>", "<HEAD>", "<HEADER>"],
+      "correct": "A",
+      "explanation": "H1 là heading cấp cao nhất; H6 là cấp thấp nhất trong nhóm H1–H6."
+    },
+    {
+      "text": "Phát biểu nào đúng về quan hệ giữa phần tử cấp khối và cấp văn bản?",
+      "type": "choice",
+      "options": ["Phần tử cấp văn bản có thể chứa mọi phần tử cấp khối", "Phần tử cấp văn bản phải nằm trong phần tử cấp khối, không theo chiều ngược lại", "Hai loại không thể lồng nhau", "Chỉ BODY mới được chứa văn bản"],
+      "correct": "B",
+      "explanation": "Theo mô hình HTML truyền thống, phần tử inline nằm trong phần tử block và không chứa phần tử block."
+    },
+    {
+      "text": "Thẻ nào tạo một đoạn văn cơ bản?",
+      "type": "choice",
+      "options": ["<P>", "<PRE>", "<BR>", "<HR>"],
+      "correct": "A",
+      "explanation": "Thẻ P biểu diễn một đoạn văn trong HTML."
+    },
+    {
+      "text": "Muốn xuống dòng rõ ràng trong một đoạn HTML, nên dùng thẻ nào?",
+      "type": "choice",
+      "options": ["<P>", "<BR>", "<DIV>", "<LI>"],
+      "correct": "B",
+      "explanation": "BR tạo một ngắt dòng ngay tại vị trí đặt thẻ."
+    },
+    {
+      "text": "Thẻ nào giữ nguyên cách xuống dòng và khoảng trắng đã định dạng?",
+      "type": "choice",
+      "options": ["<PRE>", "<P>", "<SPAN>", "<Q>"],
+      "correct": "A",
+      "explanation": "PRE hiển thị văn bản định dạng sẵn và bảo toàn khoảng trắng cùng ngắt dòng."
+    },
+    {
+      "text": "Thực thể HTML nào biểu diễn ký tự “<”?",
+      "type": "choice",
+      "options": ["&gt;", "&amp;", "&lt;", "&quot;"],
+      "correct": "C",
+      "explanation": "&lt; là thực thể HTML của dấu nhỏ hơn (<), giúp tránh bị hiểu là ký hiệu mở thẻ."
+    },
+    {
+      "text": "Cặp thẻ nào tạo danh sách có thứ tự?",
+      "type": "choice",
+      "options": ["<UL>...</UL>", "<OL>...</OL>", "<DL>...</DL>", "<LI>...</LI>"],
+      "correct": "B",
+      "explanation": "OL tạo danh sách có thứ tự; các mục con được đặt trong thẻ LI."
+    },
+    {
+      "text": "Danh sách không thứ tự được tạo bằng thẻ nào?",
+      "type": "choice",
+      "options": ["<UL>", "<OL>", "<DL>", "<TABLE>"],
+      "correct": "A",
+      "explanation": "UL tạo danh sách không thứ tự, thường được hiển thị bằng dấu đầu dòng."
+    },
+    {
+      "text": "Trong danh sách mô tả, DT và DD lần lượt biểu diễn gì?",
+      "type": "choice",
+      "options": ["Số thứ tự và mục", "Thuật ngữ và phần mô tả thuật ngữ", "Tiêu đề và ảnh", "Hàng và cột"],
+      "correct": "B",
+      "explanation": "DT chứa thuật ngữ, còn DD chứa nội dung mô tả cho thuật ngữ đó."
+    },
+    {
+      "text": "Thẻ logic nào thể hiện sự nhấn mạnh mạnh?",
+      "type": "choice",
+      "options": ["<EM>", "<STRONG>", "<SAMP>", "<VAR>"],
+      "correct": "B",
+      "explanation": "STRONG biểu thị nội dung có tầm quan trọng hoặc mức nhấn mạnh mạnh."
+    },
+    {
+      "text": "Thuộc tính quan trọng nhất của liên kết A là gì?",
+      "type": "choice",
+      "options": ["SRC", "HREF", "ALT", "ROWS"],
+      "correct": "B",
+      "explanation": "HREF chỉ định địa chỉ tài nguyên mà liên kết sẽ điều hướng tới."
+    },
+    {
+      "text": "Liên kết tuyệt đối khác liên kết tương đối ở điểm nào?",
+      "type": "choice",
+      "options": ["Luôn mở cửa sổ mới", "Dùng URL đầy đủ gồm giao thức và máy chủ", "Không thể liên kết tới HTML", "Không dùng HREF"],
+      "correct": "B",
+      "explanation": "URL tuyệt đối chứa đầy đủ giao thức, tên miền và đường dẫn; URL tương đối dựa trên vị trí hiện tại."
+    },
+    {
+      "text": "Ký hiệu nào đứng trước tên mục khi liên kết tới một vị trí trong cùng trang?",
+      "type": "choice",
+      "options": ["@", "?", "#", "&"],
+      "correct": "C",
+      "explanation": "Dấu # đứng trước fragment identifier, ví dụ href=\"#section1\"."
+    },
+    {
+      "text": "Cách tạo liên kết email đúng là gì?",
+      "type": "choice",
+      "options": ["<A SRC=\"email:user@x.com\">", "<A HREF=\"mailto:user@x.com\">Gửi email</A>", "<EMAIL>user@x.com</EMAIL>", "<A TARGET=\"user@x.com\">"],
+      "correct": "B",
+      "explanation": "Giao thức mailto trong HREF mở ứng dụng email với địa chỉ người nhận đã điền."
+    },
+    {
+      "text": "Thuộc tính bắt buộc của IMG là gì?",
+      "type": "choice",
+      "options": ["HSPACE", "BORDER", "SRC", "ALIGN"],
+      "correct": "C",
+      "explanation": "SRC chỉ định nguồn hoặc đường dẫn của hình ảnh cần hiển thị."
+    },
+    {
+      "text": "Thuộc tính ALT của IMG có mục đích chính nào?",
+      "type": "choice",
+      "options": ["Đặt màu nền ảnh", "Cung cấp văn bản thay thế", "Căn ảnh sang trái", "Tạo viền ảnh"],
+      "correct": "B",
+      "explanation": "ALT cung cấp mô tả thay thế khi ảnh không tải được và hỗ trợ công nghệ đọc màn hình."
+    },
+    {
+      "text": "Thẻ nào tạo bảng?",
+      "type": "choice",
+      "options": ["<TR>", "<TD>", "<TABLE>", "<TH>"],
+      "correct": "C",
+      "explanation": "TABLE là phần tử bao ngoài của bảng HTML; TR, TH và TD tạo cấu trúc bên trong."
+    },
+    {
+      "text": "TR và TD lần lượt có ý nghĩa gì?",
+      "type": "choice",
+      "options": ["Tiêu đề bảng và chú thích", "Hàng bảng và ô dữ liệu", "Cột và hàng", "Viền và khoảng đệm"],
+      "correct": "B",
+      "explanation": "TR tạo một hàng của bảng, còn TD tạo một ô dữ liệu trong hàng."
+    },
+    {
+      "text": "Để tài liệu dùng FRAMESET hợp lệ theo HTML 4, cần gì?",
+      "type": "choice",
+      "options": ["Frameset DOCTYPE", "Thẻ FORM", "Thuộc tính ALT", "Thẻ ARTICLE"],
+      "correct": "A",
+      "explanation": "HTML 4 yêu cầu Frameset DOCTYPE cho tài liệu sử dụng FRAMESET thay cho BODY."
+    },
+    {
+      "text": "Ưu điểm nào của frame được nêu trong bài?",
+      "type": "choice",
+      "options": ["Luôn cải thiện SEO", "Giữ một phần giao diện như mục lục luôn trên màn hình", "Tự động bảo mật trang", "Không cần URL"],
+      "correct": "B",
+      "explanation": "Frame có thể giữ một vùng cố định như mục lục trong khi vùng nội dung khác thay đổi."
+    },
+    {
+      "text": "FRAMESET dùng thuộc tính nào để chia thành hàng?",
+      "type": "choice",
+      "options": ["COLS", "ROWS", "CELLS", "HEIGHTS"],
+      "correct": "B",
+      "explanation": "ROWS chia FRAMESET theo hàng; COLS chia theo cột."
+    },
+    {
+      "text": "Thuộc tính SRC của FRAME chỉ gì?",
+      "type": "choice",
+      "options": ["Tên đích của frame", "URL tài liệu được đặt trong ô frame", "Màu viền", "Kích thước lề"],
+      "correct": "B",
+      "explanation": "SRC xác định URL của tài liệu được tải vào frame."
+    },
+    {
+      "text": "Thuộc tính NAME của FRAME được dùng để làm gì?",
+      "type": "choice",
+      "options": ["Đặt tiêu đề tab", "Làm đích cho TARGET của liên kết", "Chỉ định màu nền", "Bật thanh cuộn"],
+      "correct": "B",
+      "explanation": "NAME đặt tên cho frame để thuộc tính TARGET của liên kết có thể nhắm đến frame đó."
+    },
+    {
+      "text": "Muốn liên kết mở trang vào frame tên Main, cú pháp nào đúng?",
+      "type": "choice",
+      "options": ["<A HREF=\"page.html\" TARGET=\"Main\">", "<A SRC=\"Main\">", "<FRAME TARGET=\"page.html\">", "<A NAME=\"page.html\">"],
+      "correct": "A",
+      "explanation": "TARGET=\"Main\" yêu cầu trình duyệt mở tài liệu từ HREF vào frame có NAME là Main."
+    },
+    {
+      "text": "IFRAME khác FRAMESET ở điểm quan trọng nào?",
+      "type": "choice",
+      "options": ["IFRAME có thể đặt trực tiếp trong tài liệu và không cần FRAMESET", "IFRAME không thể tải URL", "IFRAME chỉ dùng cho ảnh", "IFRAME bắt buộc dùng Java"],
+      "correct": "A",
+      "explanation": "IFRAME nhúng một tài liệu vào ngay trong nội dung hiện tại mà không cần cấu trúc FRAMESET."
+    },
+    {
+      "text": "Mục đích chính của biểu mẫu HTML là gì?",
+      "type": "choice",
+      "options": ["Tạo bảng dữ liệu tĩnh", "Cho người dùng nhập và gửi thông tin", "Định dạng tiêu đề", "Tạo ảnh động"],
+      "correct": "B",
+      "explanation": "FORM tập hợp các điều khiển để nhận dữ liệu người dùng và gửi tới nơi xử lý."
+    },
+    {
+      "text": "Hai thành phần cơ bản của một biểu mẫu web là gì?",
+      "type": "choice",
+      "options": ["HEAD và BODY", "Vỏ biểu mẫu và script xử lý dữ liệu", "TABLE và CAPTION", "HTML và CSS"],
+      "correct": "B",
+      "explanation": "Biểu mẫu cần phần giao diện thu thập dữ liệu và chương trình phía máy chủ hoặc client để xử lý dữ liệu."
+    },
+    {
+      "text": "Thuộc tính ACTION của FORM chỉ gì?",
+      "type": "choice",
+      "options": ["Kiểu nút", "Địa chỉ chương trình xử lý biểu mẫu", "Tên trường dữ liệu", "Số ký tự tối đa"],
+      "correct": "B",
+      "explanation": "ACTION chứa URL nhận và xử lý dữ liệu khi form được gửi."
+    },
+    {
+      "text": "METHOD=\"POST\" mô tả điều gì?",
+      "type": "choice",
+      "options": ["Phương thức gửi dữ liệu của form", "Màu nền form", "Loại ô nhập", "Tên nút gửi"],
+      "correct": "A",
+      "explanation": "METHOD xác định phương thức HTTP; POST gửi dữ liệu form trong phần thân yêu cầu."
+    },
+    {
+      "text": "Cú pháp nào tạo ô nhập văn bản một dòng?",
+      "type": "choice",
+      "options": ["<INPUT TYPE=\"text\">", "<TEXTAREA TYPE=\"text\">", "<SELECT TYPE=\"text\">", "<FORM TYPE=\"text\">"],
+      "correct": "A",
+      "explanation": "INPUT với type=\"text\" tạo một trường nhập văn bản một dòng."
+    },
+    {
+      "text": "Thuộc tính NAME của INPUT có vai trò gì?",
+      "type": "choice",
+      "options": ["Đặt màu chữ", "Xác định tên trường để script xử lý nhận dữ liệu", "Đặt chiều rộng cửa sổ", "Tạo nhãn tự động"],
+      "correct": "B",
+      "explanation": "NAME là khóa của trường dữ liệu khi trình duyệt gửi giá trị tới chương trình xử lý."
+    },
+    {
+      "text": "Muốn nhập nội dung nhiều dòng, nên dùng phần tử nào?",
+      "type": "choice",
+      "options": ["INPUT type=text", "TEXTAREA", "OPTION", "LABEL"],
+      "correct": "B",
+      "explanation": "TEXTAREA được thiết kế để nhập văn bản trên nhiều dòng."
+    },
+    {
+      "text": "Để các nút radio hoạt động như một nhóm chỉ chọn một, chúng cần gì?",
+      "type": "choice",
+      "options": ["Cùng giá trị VALUE", "Cùng thuộc tính NAME", "Cùng SIZE", "Khác TYPE"],
+      "correct": "B",
+      "explanation": "Các radio có cùng NAME thuộc một nhóm, vì vậy tại một thời điểm chỉ chọn được một nút."
+    },
+    {
+      "text": "Thuộc tính MULTIPLE của SELECT cho phép gì?",
+      "type": "choice",
+      "options": ["Chọn nhiều mục", "Tạo nhiều form", "Gửi nhiều lần", "Tạo nhiều nút submit"],
+      "correct": "A",
+      "explanation": "MULTIPLE cho phép người dùng chọn nhiều OPTION trong cùng một SELECT."
+    },
+    {
+      "text": "Trong JSP, request.getParameter(\"tx1\") dùng để làm gì?",
+      "type": "choice",
+      "options": ["Tạo thẻ HTML mới", "Lấy giá trị tham số có tên tx1 từ yêu cầu", "Đặt màu cho trang", "Đóng kết nối"],
+      "correct": "B",
+      "explanation": "request.getParameter(\"tx1\") đọc giá trị tham số tx1 được gửi trong HTTP request."
+    }
+  ]
+}

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { checkAnswer, deleteQuiz, fetchOwnerQuizzes, fetchPublicQuiz, saveQuiz, submitAttempt } from './lib/quizApi';
-import { importQuizDocx } from './lib/wordImport';
+import { importQuizJson } from './lib/jsonImport';
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -183,18 +183,18 @@ function Dashboard({ go, quizzes, onDelete, loading, error, user }) {
 
 const emptyQuestion = () => ({ id: uid(), text: '', type: 'choice', options: ['', '', '', ''], correct: 0, explanation: '' });
 
-function WordImportModal({ onClose, onImport }) {
+function JsonImportModal({ onClose, onImport }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async () => {
-    if (!file) { setError('Hãy chọn một file Word .docx.'); return; }
+    if (!file) { setError('Hãy chọn một file JSON.'); return; }
     setBusy(true); setError('');
     try { await onImport(file); onClose(); }
-    catch (err) { setError(err.message || 'Không thể đọc file Word.'); }
+    catch (err) { setError(err.message || 'Không thể đọc file JSON.'); }
     finally { setBusy(false); }
   };
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="import-modal" onMouseDown={event=>event.stopPropagation()}><button className="modal-close" onClick={onClose}><X/></button><span className="share-icon"><FileText/></span><h2>Nhập câu hỏi từ Word</h2><p>Quizora đọc file <b>.docx</b> và tự tạo hàng loạt câu hỏi để bạn kiểm tra lại.</p><label className={file?'word-dropzone has-file':'word-dropzone'}><input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event=>setFile(event.target.files?.[0]||null)}/>{file?<><CheckCircle2/><b>{file.name}</b><small>{Math.ceil(file.size/1024)} KB · Bấm để chọn file khác</small></>:<><FileUp/><b>Chọn file Word</b><small>Chỉ hỗ trợ .docx · tối đa theo giới hạn trình duyệt</small></>}</label><div className="word-format"><b>Định dạng mẫu</b><pre>{`Câu 1: Thủ đô Việt Nam là gì?\nA. Hà Nội\nB. Đà Nẵng\nC. TP. Hồ Chí Minh\nĐáp án: A\nGiải thích: Hà Nội là thủ đô của Việt Nam.\n\nCâu 2: Trái Đất hình cầu.\nĐáp án: Đúng\nGiải thích: Đây là một hành tinh gần hình cầu.`}</pre></div>{error&&<div className="data-error">{error}</div>}<div className="import-actions"><button className="btn soft" onClick={onClose}>Hủy</button><button className="btn primary" disabled={busy||!file} onClick={submit}>{busy?<LoaderCircle className="spin"/>:<FileUp/>} Nhập câu hỏi</button></div></div></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="import-modal" onMouseDown={event=>event.stopPropagation()}><button className="modal-close" onClick={onClose}><X/></button><span className="share-icon"><FileText/></span><h2>Nhập bộ câu hỏi JSON</h2><p>Upload một file <b>.json</b>, Quizora sẽ kiểm tra cấu trúc trước khi thêm vào bộ đề.</p><label className={file?'word-dropzone has-file':'word-dropzone'}><input type="file" accept=".json,application/json" onChange={event=>setFile(event.target.files?.[0]||null)}/>{file?<><CheckCircle2/><b>{file.name}</b><small>{Math.ceil(file.size/1024)} KB · Bấm để chọn file khác</small></>:<><FileUp/><b>Chọn file JSON</b><small>Hỗ trợ trắc nghiệm, Đúng/Sai và giải thích đáp án</small></>}</label><div className="word-format"><b>Cấu trúc ngắn gọn</b><pre>{`{\n  "title": "Bộ câu hỏi mẫu",\n  "questions": [\n    {\n      "text": "2 + 2 bằng mấy?",\n      "type": "choice",\n      "options": ["3", "4", "5"],\n      "correct": "B",\n      "explanation": "2 + 2 = 4"\n    }\n  ]\n}`}</pre><a className="template-link" href="/quiz-template.json" download><FileText/> Tải file JSON mẫu</a></div>{error&&<div className="data-error">{error}</div>}<div className="import-actions"><button className="btn soft" onClick={onClose}>Hủy</button><button className="btn primary" disabled={busy||!file} onClick={submit}>{busy?<LoaderCircle className="spin"/>:<FileUp/>} Nhập câu hỏi</button></div></div></div>;
 }
 
 function Editor({ go, quizzes, onSave, id, user }) {
@@ -212,7 +212,7 @@ function Editor({ go, quizzes, onSave, id, user }) {
   const save = async (publish = false) => {
     const hasBlank = !quiz.title.trim() || quiz.questions.some(q => !q.text.trim() || q.options.length < 2 || q.options.length > 8 || q.options.some(option => !option.trim()));
     if (hasBlank) { setSaveError('Vui lòng nhập tiêu đề, nội dung và từ 2 đến 8 đáp án cho mỗi câu.'); return; }
-    if (quiz.questions.some(q=>q.needsReview)) { setSaveError('Có câu nhập từ Word chưa xác định được đáp án đúng. Hãy chọn đáp án cho các câu được đánh dấu.'); return; }
+    if (quiz.questions.some(q=>q.needsReview)) { setSaveError('Có câu nhập từ JSON chưa xác định được đáp án đúng. Hãy chọn đáp án cho các câu được đánh dấu.'); return; }
     setSaving(true); setSaveError('');
     try {
       const final = await onSave(quiz, publish ? 'published' : quiz.status);
@@ -232,22 +232,22 @@ function Editor({ go, quizzes, onSave, id, user }) {
     const correct=question.correct===index?0:question.correct>index?question.correct-1:question.correct;
     setQuestion({options,correct,needsReview:false});
   };
-  const importWord = async file => {
-    const { questions, warnings } = await importQuizDocx(file);
+  const importJson = async file => {
+    const { questions, warnings, meta } = await importQuizJson(file);
     const replaceBlank = quiz.questions.length===1 && !quiz.questions[0].text.trim();
     const startIndex = replaceBlank ? 0 : quiz.questions.length;
-    setQuiz(current=>({...current,questions:replaceBlank?questions:[...current.questions,...questions]}));
+    setQuiz(current=>({...current,title:meta.title&&(current.title==='Bộ câu hỏi chưa đặt tên'||!current.title.trim())?meta.title:current.title,description:meta.description||current.description,emoji:meta.emoji||current.emoji,questions:replaceBlank?questions:[...current.questions,...questions]}));
     setSelected(startIndex);
     setImportNotice(`Đã nhập ${questions.length} câu hỏi${warnings.length?` · ${warnings.length} mục cần lưu ý`:''}.`);
   };
   return <AdminShell go={go} active="quizzes" user={user}>
-    <header className="editor-top"><button className="back-btn" onClick={()=>go('/admin')}><ArrowLeft/></button><div className="editable-title"><input value={quiz.title} onChange={e=>setQuiz({...quiz,title:e.target.value})}/><span>{saved ? 'Đã lưu lên Supabase' : 'Chưa lưu thay đổi'}</span></div><div className="editor-actions"><button className="btn import-word-btn" onClick={()=>setImportOpen(true)}><FileUp/> Nhập từ Word</button><button className="btn soft" disabled={saving} onClick={()=>save(false)}>{saving?<LoaderCircle className="spin"/>:saved?<Check/>:null} Lưu nháp</button><button className="btn primary" disabled={saving} onClick={()=>save(true)}><Rocket/> Xuất bản & lấy link</button></div></header>
+    <header className="editor-top"><button className="back-btn" onClick={()=>go('/admin')}><ArrowLeft/></button><div className="editable-title"><input value={quiz.title} onChange={e=>setQuiz({...quiz,title:e.target.value})}/><span>{saved ? 'Đã lưu lên Supabase' : 'Chưa lưu thay đổi'}</span></div><div className="editor-actions"><button className="btn import-word-btn" onClick={()=>setImportOpen(true)}><FileUp/> Nhập JSON</button><button className="btn soft" disabled={saving} onClick={()=>save(false)}>{saving?<LoaderCircle className="spin"/>:saved?<Check/>:null} Lưu nháp</button><button className="btn primary" disabled={saving} onClick={()=>save(true)}><Rocket/> Xuất bản & lấy link</button></div></header>
     <div className="editor-layout">
       <aside className="question-list"><div className="question-list-head"><b>Câu hỏi</b><span>{quiz.questions.length}</span></div><div className="question-scroll">{quiz.questions.map((q,i)=><button className={`${i===selected?'question-item active':'question-item'} ${q.needsReview?'needs-review':''}`} key={q.id} onClick={()=>setSelected(i)}><span>{q.needsReview?'!':i+1}</span><div><b>{q.text || 'Câu hỏi chưa có nội dung'}</b><small>{q.type==='true_false'?'Đúng / Sai':`Trắc nghiệm · ${q.options.length} lựa chọn`}</small></div><Trash2 onClick={e=>{e.stopPropagation();deleteQuestion(i)}}/></button>)}</div><button className="add-question" onClick={addQuestion}><Plus/> Thêm câu hỏi</button></aside>
       <main className="question-editor"><div className="editor-canvas">
           {saveError&&<div className="data-error">{saveError}</div>}
           {importNotice&&<div className="import-notice"><CheckCircle2/><span>{importNotice}</span><button onClick={()=>setImportNotice('')}><X/></button></div>}
-          {question.needsReview&&<div className="review-warning"><CircleAlert/><span>Câu này được nhập từ Word nhưng chưa nhận dạng được đáp án. Hãy chọn đáp án đúng.</span></div>}
+          {question.needsReview&&<div className="review-warning"><CircleAlert/><span>Câu này được nhập từ JSON nhưng chưa nhận dạng được đáp án. Hãy chọn đáp án đúng.</span></div>}
           <div className="editor-meta"><span>CÂU {selected+1}</span><div className="editor-meta-actions"><div className="question-type-switch"><button className={question.type!=='true_false'?'active':''} onClick={()=>setQuestionType('choice')}>Trắc nghiệm</button><button className={question.type==='true_false'?'active':''} onClick={()=>setQuestionType('true_false')}>Đúng / Sai</button></div><label><Clock3/> <select value={quiz.timeLimit} onChange={e=>setQuiz({...quiz,timeLimit:Number(e.target.value)})}><option value="10">10 giây</option><option value="20">20 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select></label></div></div>
           <textarea className="question-input" value={question.text} onChange={e=>setQuestion({text:e.target.value})} placeholder="Nhập nội dung câu hỏi của bạn..." rows="2"/>
           <p className="answer-label">{question.type==='true_false'?'CHỌN ĐÚNG HOẶC SAI':'CÁC LỰA CHỌN'} <span>Chọn dấu tích cho đáp án đúng</span></p>
@@ -258,7 +258,9 @@ function Editor({ go, quizzes, onSave, id, user }) {
         </div><div className="editor-footer"><span><CheckCircle2/> Mọi thay đổi đã được ghi nhận</span><button className="btn primary" onClick={addQuestion}>Thêm câu tiếp theo <ArrowRight/></button></div></main>
     </div>
     {share&&<ShareModal quiz={quiz} onClose={()=>setShare(false)}/>}
-    {importOpen&&<WordImportModal onClose={()=>setImportOpen(false)} onImport={importWord}/>}
+    {importOpen && (
+      <JsonImportModal onClose={()=>setImportOpen(false)} onImport={importJson}/>
+    )}
   </AdminShell>;
 }
 

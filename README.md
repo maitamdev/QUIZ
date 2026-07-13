@@ -9,7 +9,7 @@ Website tạo và làm bài trắc nghiệm theo phong cách game-show, gồm đ
 - Thêm giải thích đáp án; chỉ trả về cho người chơi sau khi nộp bài.
 - Phản hồi đúng/sai tức thời: đáp án đúng màu xanh, lựa chọn sai màu đỏ.
 - Tính điểm theo tốc độ và tự đưa câu sai vào vòng ôn lại cuối bài.
-- Nhập hàng loạt câu hỏi từ file Word `.docx`.
+- Nhập hàng loạt câu hỏi từ file JSON có kiểm tra cấu trúc.
 - Xuất bản và sao chép link riêng cho từng bài quiz.
 - Người tham gia nhập tên, làm bài theo thời gian và xem kết quả.
 - Dữ liệu thật được lưu trên Supabase PostgreSQL.
@@ -42,22 +42,30 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...
 
 Khi cập nhật từ phiên bản cũ, hãy chạy lại toàn bộ `supabase/schema.sql` để thêm loại câu hỏi, giải thích và hỗ trợ tối đa 8 lựa chọn. File schema được thiết kế để có thể chạy lại.
 
-## Mẫu nhập Word
+## Mẫu nhập JSON
 
-```text
-Câu 1: Thủ đô Việt Nam là gì?
-A. Hà Nội
-B. Đà Nẵng
-C. TP. Hồ Chí Minh
-Đáp án: A
-Giải thích: Hà Nội là thủ đô của Việt Nam.
-
-Câu 2: Trái Đất hình cầu.
-Đáp án: Đúng
-Giải thích: Trái Đất có dạng gần hình cầu.
+```json
+{
+  "title": "Bộ câu hỏi mẫu",
+  "questions": [
+    {
+      "text": "Thủ đô Việt Nam là thành phố nào?",
+      "type": "choice",
+      "options": ["Hà Nội", "Đà Nẵng", "Huế"],
+      "correct": "A",
+      "explanation": "Hà Nội là thủ đô của Việt Nam."
+    },
+    {
+      "text": "Trái Đất có dạng gần hình cầu.",
+      "type": "true_false",
+      "correct": true,
+      "explanation": "Trái Đất là một khối cầu hơi dẹt ở hai cực."
+    }
+  ]
+}
 ```
 
-Mỗi câu trắc nghiệm có thể có từ 2 đến 8 đáp án, ký hiệu từ A đến H. Câu Đúng/Sai chỉ cần ghi `Đáp án: Đúng` hoặc `Đáp án: Sai`.
+Mỗi câu trắc nghiệm có thể có từ 2 đến 8 đáp án. Trường `correct` nhận chỉ số bắt đầu từ `0`, chữ cái `A`–`H`, nội dung đáp án, hoặc boolean với câu Đúng/Sai. File mẫu có thể tải trực tiếp trong cửa sổ nhập JSON.
 
 Không sử dụng `service_role`/secret key trong file `.env` của frontend.
 

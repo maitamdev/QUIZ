@@ -1,0 +1,20 @@
+{
+  "title": "Bộ câu hỏi mẫu",
+  "description": "Có thể bỏ qua title và description nếu chỉ muốn nhập câu hỏi.",
+  "emoji": "🧠",
+  "questions": [
+    {
+      "text": "Thủ đô Việt Nam là thành phố nào?",
+      "type": "choice",
+      "options": ["Hà Nội", "Đà Nẵng", "Huế"],
+      "correct": "A",
+      "explanation": "Hà Nội là thủ đô của Việt Nam."
+    },
+    {
+      "text": "Trái Đất có dạng gần hình cầu.",
+      "type": "true_false",
+      "correct": true,
+      "explanation": "Trái Đất là một khối cầu hơi dẹt ở hai cực."
+    }
+  ]
+}
