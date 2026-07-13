@@ -23,13 +23,14 @@ create table if not exists public.quiz_questions (
   quiz_id uuid not null references public.quizzes(id) on delete cascade,
   position integer not null check (position >= 0),
   text text not null check (char_length(text) between 1 and 1000),
+  question_type text not null default 'choice' check (question_type in ('choice', 'true_false')),
   unique (quiz_id, position)
 );
 
 create table if not exists public.quiz_options (
   id uuid primary key default gen_random_uuid(),
   question_id uuid not null references public.quiz_questions(id) on delete cascade,
-  position integer not null check (position between 0 and 3),
+  position integer not null check (position between 0 and 7),
   text text not null check (char_length(text) between 1 and 500),
   unique (question_id, position)
 );
@@ -37,8 +38,19 @@ create table if not exists public.quiz_options (
 -- Correct answers live in a separate protected table so public players cannot inspect them.
 create table if not exists public.quiz_answers (
   question_id uuid primary key references public.quiz_questions(id) on delete cascade,
-  correct_option integer not null check (correct_option between 0 and 3)
+  correct_option integer not null check (correct_option between 0 and 7),
+  explanation text not null default ''
 );
+
+-- Upgrade existing installations created by an older Quizora schema.
+alter table public.quiz_questions add column if not exists question_type text not null default 'choice';
+alter table public.quiz_questions drop constraint if exists quiz_questions_question_type_check;
+alter table public.quiz_questions add constraint quiz_questions_question_type_check check (question_type in ('choice', 'true_false'));
+alter table public.quiz_answers add column if not exists explanation text not null default '';
+alter table public.quiz_options drop constraint if exists quiz_options_position_check;
+alter table public.quiz_options add constraint quiz_options_position_check check (position between 0 and 7);
+alter table public.quiz_answers drop constraint if exists quiz_answers_correct_option_check;
+alter table public.quiz_answers add constraint quiz_answers_correct_option_check check (correct_option between 0 and 7);
 
 create table if not exists public.quiz_attempts (
   id uuid primary key default gen_random_uuid(),
@@ -189,11 +201,18 @@ begin
   for v_question, v_question_position in
     select value, (ordinality - 1)::integer from jsonb_array_elements(p_payload->'questions') with ordinality
   loop
-    insert into public.quiz_questions (quiz_id, position, text)
-    values (v_quiz_id, v_question_position, trim(v_question->>'text')) returning id into v_question_id;
+    insert into public.quiz_questions (quiz_id, position, text, question_type)
+    values (
+      v_quiz_id, v_question_position, trim(v_question->>'text'),
+      coalesce(v_question->>'type', 'choice')
+    ) returning id into v_question_id;
 
-    if jsonb_array_length(coalesce(v_question->'options', '[]'::jsonb)) <> 4 then
-      raise exception 'Every question must have exactly four options';
+    if jsonb_array_length(coalesce(v_question->'options', '[]'::jsonb)) not between 2 and 8 then
+      raise exception 'Every question must have between two and eight options';
+    end if;
+    if coalesce(v_question->>'type', 'choice') = 'true_false'
+       and jsonb_array_length(v_question->'options') <> 2 then
+      raise exception 'True/false questions must have exactly two options';
     end if;
     for v_option, v_option_position in
       select value, (ordinality - 1)::integer from jsonb_array_elements(v_question->'options') with ordinality
@@ -201,8 +220,11 @@ begin
       insert into public.quiz_options (question_id, position, text)
       values (v_question_id, v_option_position, trim(v_option #>> '{}'));
     end loop;
-    insert into public.quiz_answers (question_id, correct_option)
-    values (v_question_id, (v_question->>'correct')::integer);
+    insert into public.quiz_answers (question_id, correct_option, explanation)
+    values (
+      v_question_id, (v_question->>'correct')::integer,
+      coalesce(v_question->>'explanation', '')
+    );
   end loop;
   return v_quiz_id;
 end;
@@ -219,6 +241,7 @@ declare
   v_total integer;
   v_score integer;
   v_percent numeric(5,2);
+  v_review jsonb;
 begin
   if not exists (select 1 from public.quizzes where id = p_quiz_id and status = 'published') then
     raise exception 'Published quiz not found';
@@ -246,7 +269,19 @@ begin
   set average = round(((average * plays) + v_percent) / (plays + 1), 2), plays = plays + 1
   where id = p_quiz_id;
 
-  return jsonb_build_object('score', v_score, 'total', v_total, 'percent', v_percent);
+  select jsonb_agg(
+    jsonb_build_object(
+      'position', qq.position,
+      'selected', case when p_answers->>qq.position is null then null else (p_answers->>qq.position)::integer end,
+      'correct', qa.correct_option,
+      'explanation', qa.explanation
+    ) order by qq.position
+  ) into v_review
+  from public.quiz_questions qq
+  join public.quiz_answers qa on qa.question_id = qq.id
+  where qq.quiz_id = p_quiz_id;
+
+  return jsonb_build_object('score', v_score, 'total', v_total, 'percent', v_percent, 'review', v_review);
 end;
 $$;
 
@@ -258,4 +293,3 @@ grant execute on function public.submit_quiz_attempt(uuid, text, jsonb) to anon,
 grant select on public.quizzes, public.quiz_questions, public.quiz_options to anon, authenticated;
 grant insert, update, delete on public.quizzes, public.quiz_questions, public.quiz_options, public.quiz_answers to authenticated;
 grant select on public.quiz_answers, public.quiz_attempts to authenticated;
-

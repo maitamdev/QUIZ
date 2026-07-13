@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, BarChart3, BookOpen, Check, CheckCircle2, ChevronDown,
-  CircleHelp, Clock3, Copy, Crown, Edit3, Eye, Flame, Globe2, Grid2X2, Home,
+  CircleAlert, CircleHelp, Clock3, Copy, Crown, Edit3, Eye, FileText, FileUp, Flame, Globe2, Grid2X2, Home,
   Layers3, Link2, ListChecks, Menu, MoreHorizontal, PartyPopper, Play, Plus,
   Database, LoaderCircle, LogOut, Rocket, Search, Settings, Share2, ShieldCheck,
   Sparkles, Star, Trash2, Trophy, Users, WandSparkles, X, Zap
 } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { deleteQuiz, fetchOwnerQuizzes, fetchPublicQuiz, saveQuiz, submitAttempt } from './lib/quizApi';
+import { importQuizDocx } from './lib/wordImport';
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 const colors = ['purple', 'orange', 'blue', 'green'];
-const answerLetters = ['A', 'B', 'C', 'D'];
+const answerLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 function useHashRoute() {
   const getRoute = () => window.location.hash.slice(1) || '/';
@@ -180,7 +181,21 @@ function Dashboard({ go, quizzes, onDelete, loading, error, user }) {
   </AdminShell>;
 }
 
-const emptyQuestion = () => ({ id: uid(), text: '', options: ['', '', '', ''], correct: 0 });
+const emptyQuestion = () => ({ id: uid(), text: '', type: 'choice', options: ['', '', '', ''], correct: 0, explanation: '' });
+
+function WordImportModal({ onClose, onImport }) {
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async () => {
+    if (!file) { setError('Hãy chọn một file Word .docx.'); return; }
+    setBusy(true); setError('');
+    try { await onImport(file); onClose(); }
+    catch (err) { setError(err.message || 'Không thể đọc file Word.'); }
+    finally { setBusy(false); }
+  };
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="import-modal" onMouseDown={event=>event.stopPropagation()}><button className="modal-close" onClick={onClose}><X/></button><span className="share-icon"><FileText/></span><h2>Nhập câu hỏi từ Word</h2><p>Quizora đọc file <b>.docx</b> và tự tạo hàng loạt câu hỏi để bạn kiểm tra lại.</p><label className={file?'word-dropzone has-file':'word-dropzone'}><input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event=>setFile(event.target.files?.[0]||null)}/>{file?<><CheckCircle2/><b>{file.name}</b><small>{Math.ceil(file.size/1024)} KB · Bấm để chọn file khác</small></>:<><FileUp/><b>Chọn file Word</b><small>Chỉ hỗ trợ .docx · tối đa theo giới hạn trình duyệt</small></>}</label><div className="word-format"><b>Định dạng mẫu</b><pre>{`Câu 1: Thủ đô Việt Nam là gì?\nA. Hà Nội\nB. Đà Nẵng\nC. TP. Hồ Chí Minh\nĐáp án: A\nGiải thích: Hà Nội là thủ đô của Việt Nam.\n\nCâu 2: Trái Đất hình cầu.\nĐáp án: Đúng\nGiải thích: Đây là một hành tinh gần hình cầu.`}</pre></div>{error&&<div className="data-error">{error}</div>}<div className="import-actions"><button className="btn soft" onClick={onClose}>Hủy</button><button className="btn primary" disabled={busy||!file} onClick={submit}>{busy?<LoaderCircle className="spin"/>:<FileUp/>} Nhập câu hỏi</button></div></div></div>;
+}
 
 function Editor({ go, quizzes, onSave, id, user }) {
   const existing = quizzes.find(q => q.id === id);
@@ -190,11 +205,14 @@ function Editor({ go, quizzes, onSave, id, user }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState('');
   const question = quiz.questions[selected];
   const setQuestion = (patch) => setQuiz(q => ({...q, questions: q.questions.map((x,i)=>i===selected?{...x,...patch}:x)}));
   const save = async (publish = false) => {
-    const hasBlank = !quiz.title.trim() || quiz.questions.some(q => !q.text.trim() || q.options.some(option => !option.trim()));
-    if (hasBlank) { setSaveError('Vui lòng nhập đầy đủ tiêu đề, câu hỏi và cả 4 đáp án trước khi lưu.'); return; }
+    const hasBlank = !quiz.title.trim() || quiz.questions.some(q => !q.text.trim() || q.options.length < 2 || q.options.length > 8 || q.options.some(option => !option.trim()));
+    if (hasBlank) { setSaveError('Vui lòng nhập tiêu đề, nội dung và từ 2 đến 8 đáp án cho mỗi câu.'); return; }
+    if (quiz.questions.some(q=>q.needsReview)) { setSaveError('Có câu nhập từ Word chưa xác định được đáp án đúng. Hãy chọn đáp án cho các câu được đánh dấu.'); return; }
     setSaving(true); setSaveError('');
     try {
       const final = await onSave(quiz, publish ? 'published' : quiz.status);
@@ -204,14 +222,43 @@ function Editor({ go, quizzes, onSave, id, user }) {
   };
   const addQuestion = () => { setQuiz(q=>({...q,questions:[...q.questions,emptyQuestion()]})); setSelected(quiz.questions.length); };
   const deleteQuestion = (index) => { if(quiz.questions.length===1) return; setQuiz(q=>({...q,questions:q.questions.filter((_,i)=>i!==index)})); setSelected(Math.max(0, selected > index ? selected-1 : Math.min(selected, quiz.questions.length-2))); };
+  const setQuestionType = type => setQuestion(type === 'true_false'
+    ? { type, options: ['Đúng', 'Sai'], correct: 0, needsReview: false }
+    : { type, options: question.type === 'true_false' ? ['', '', ''] : question.options, correct: 0, needsReview: false });
+  const addOption = () => { if(question.type==='true_false'||question.options.length>=8)return; setQuestion({options:[...question.options,'']}); };
+  const removeOption = index => {
+    if(question.type==='true_false'||question.options.length<=2)return;
+    const options=question.options.filter((_,i)=>i!==index);
+    const correct=question.correct===index?0:question.correct>index?question.correct-1:question.correct;
+    setQuestion({options,correct,needsReview:false});
+  };
+  const importWord = async file => {
+    const { questions, warnings } = await importQuizDocx(file);
+    const replaceBlank = quiz.questions.length===1 && !quiz.questions[0].text.trim();
+    const startIndex = replaceBlank ? 0 : quiz.questions.length;
+    setQuiz(current=>({...current,questions:replaceBlank?questions:[...current.questions,...questions]}));
+    setSelected(startIndex);
+    setImportNotice(`Đã nhập ${questions.length} câu hỏi${warnings.length?` · ${warnings.length} mục cần lưu ý`:''}.`);
+  };
   return <AdminShell go={go} active="quizzes" user={user}>
-    <header className="editor-top"><button className="back-btn" onClick={()=>go('/admin')}><ArrowLeft/></button><div className="editable-title"><input value={quiz.title} onChange={e=>setQuiz({...quiz,title:e.target.value})}/><span>{saved ? 'Đã lưu lên Supabase' : 'Chưa lưu thay đổi'}</span></div><div className="editor-actions"><button className="btn soft" disabled={saving} onClick={()=>save(false)}>{saving?<LoaderCircle className="spin"/>:saved?<Check/>:null} Lưu nháp</button><button className="btn primary" disabled={saving} onClick={()=>save(true)}><Rocket/> Xuất bản & lấy link</button></div></header>
+    <header className="editor-top"><button className="back-btn" onClick={()=>go('/admin')}><ArrowLeft/></button><div className="editable-title"><input value={quiz.title} onChange={e=>setQuiz({...quiz,title:e.target.value})}/><span>{saved ? 'Đã lưu lên Supabase' : 'Chưa lưu thay đổi'}</span></div><div className="editor-actions"><button className="btn import-word-btn" onClick={()=>setImportOpen(true)}><FileUp/> Nhập từ Word</button><button className="btn soft" disabled={saving} onClick={()=>save(false)}>{saving?<LoaderCircle className="spin"/>:saved?<Check/>:null} Lưu nháp</button><button className="btn primary" disabled={saving} onClick={()=>save(true)}><Rocket/> Xuất bản & lấy link</button></div></header>
     <div className="editor-layout">
-      <aside className="question-list"><div className="question-list-head"><b>Câu hỏi</b><span>{quiz.questions.length}</span></div><div className="question-scroll">{quiz.questions.map((q,i)=><button className={i===selected?'question-item active':'question-item'} key={q.id} onClick={()=>setSelected(i)}><span>{i+1}</span><div><b>{q.text || 'Câu hỏi chưa có nội dung'}</b><small>Trắc nghiệm · 4 lựa chọn</small></div><Trash2 onClick={e=>{e.stopPropagation();deleteQuestion(i)}}/></button>)}</div><button className="add-question" onClick={addQuestion}><Plus/> Thêm câu hỏi</button></aside>
-      <main className="question-editor"><div className="editor-canvas">{saveError&&<div className="data-error">{saveError}</div>}<div className="editor-meta"><span>CÂU {selected+1}</span><label><Clock3/> <select value={quiz.timeLimit} onChange={e=>setQuiz({...quiz,timeLimit:Number(e.target.value)})}><option value="10">10 giây</option><option value="20">20 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select></label></div><textarea className="question-input" value={question.text} onChange={e=>setQuestion({text:e.target.value})} placeholder="Nhập nội dung câu hỏi của bạn..." rows="2"/><p className="answer-label">CÁC LỰA CHỌN <span>Chọn dấu tích cho đáp án đúng</span></p><div className="answer-editor-grid">{question.options.map((opt,i)=><div className={question.correct===i?'answer-editor correct':'answer-editor'} key={i}><button onClick={()=>setQuestion({correct:i})}>{question.correct===i?<Check/>:answerLetters[i]}</button><input value={opt} onChange={e=>{const options=[...question.options];options[i]=e.target.value;setQuestion({options})}} placeholder={`Nhập đáp án ${answerLetters[i]}...`}/>{question.correct===i&&<span>Đáp án đúng</span>}</div>)}</div>
+      <aside className="question-list"><div className="question-list-head"><b>Câu hỏi</b><span>{quiz.questions.length}</span></div><div className="question-scroll">{quiz.questions.map((q,i)=><button className={`${i===selected?'question-item active':'question-item'} ${q.needsReview?'needs-review':''}`} key={q.id} onClick={()=>setSelected(i)}><span>{q.needsReview?'!':i+1}</span><div><b>{q.text || 'Câu hỏi chưa có nội dung'}</b><small>{q.type==='true_false'?'Đúng / Sai':`Trắc nghiệm · ${q.options.length} lựa chọn`}</small></div><Trash2 onClick={e=>{e.stopPropagation();deleteQuestion(i)}}/></button>)}</div><button className="add-question" onClick={addQuestion}><Plus/> Thêm câu hỏi</button></aside>
+      <main className="question-editor"><div className="editor-canvas">
+          {saveError&&<div className="data-error">{saveError}</div>}
+          {importNotice&&<div className="import-notice"><CheckCircle2/><span>{importNotice}</span><button onClick={()=>setImportNotice('')}><X/></button></div>}
+          {question.needsReview&&<div className="review-warning"><CircleAlert/><span>Câu này được nhập từ Word nhưng chưa nhận dạng được đáp án. Hãy chọn đáp án đúng.</span></div>}
+          <div className="editor-meta"><span>CÂU {selected+1}</span><div className="editor-meta-actions"><div className="question-type-switch"><button className={question.type!=='true_false'?'active':''} onClick={()=>setQuestionType('choice')}>Trắc nghiệm</button><button className={question.type==='true_false'?'active':''} onClick={()=>setQuestionType('true_false')}>Đúng / Sai</button></div><label><Clock3/> <select value={quiz.timeLimit} onChange={e=>setQuiz({...quiz,timeLimit:Number(e.target.value)})}><option value="10">10 giây</option><option value="20">20 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select></label></div></div>
+          <textarea className="question-input" value={question.text} onChange={e=>setQuestion({text:e.target.value})} placeholder="Nhập nội dung câu hỏi của bạn..." rows="2"/>
+          <p className="answer-label">{question.type==='true_false'?'CHỌN ĐÚNG HOẶC SAI':'CÁC LỰA CHỌN'} <span>Chọn dấu tích cho đáp án đúng</span></p>
+          <div className="answer-editor-grid">{question.options.map((opt,i)=><div className={question.correct===i?'answer-editor correct':'answer-editor'} key={i}><button className="answer-check" onClick={()=>setQuestion({correct:i,needsReview:false})}>{question.correct===i?<Check/>:answerLetters[i]}</button><input disabled={question.type==='true_false'} value={opt} onChange={e=>{const options=[...question.options];options[i]=e.target.value;setQuestion({options})}} placeholder={`Nhập đáp án ${answerLetters[i]}...`}/>{question.correct===i&&<span className="correct-label">Đáp án đúng</span>}{question.type!=='true_false'&&question.options.length>2&&<button className="remove-option" title="Xóa lựa chọn" onClick={()=>removeOption(i)}><X/></button>}</div>)}</div>
+          <div className="answer-tools"><span>{question.type==='true_false'?'Hai lựa chọn được tạo tự động.':`${question.options.length}/8 lựa chọn`}</span>{question.type!=='true_false'&&<button disabled={question.options.length>=8} onClick={addOption}><Plus/> Thêm lựa chọn</button>}</div>
+          <div className="explanation-box"><span><CircleHelp/></span><label><b>Giải thích đáp án</b><small>Hiển thị cho người chơi sau khi nộp bài.</small><textarea rows="3" value={question.explanation||''} onChange={e=>setQuestion({explanation:e.target.value})} placeholder="Ví dụ: Hà Nội là thủ đô của Việt Nam từ năm 1010..."/></label></div>
           <div className="quiz-settings"><h3><Settings/> Thiết lập bộ đề</h3><div className="settings-row"><label>Biểu tượng<input className="emoji-input" value={quiz.emoji} onChange={e=>setQuiz({...quiz,emoji:e.target.value})}/></label><label>Màu chủ đề<div className="color-picker">{colors.map(c=><button key={c} className={`${c} ${quiz.color===c?'active':''}`} onClick={()=>setQuiz({...quiz,color:c})}>{quiz.color===c&&<Check/>}</button>)}</div></label><label>Mô tả<input value={quiz.description} onChange={e=>setQuiz({...quiz,description:e.target.value})} placeholder="Mô tả ngắn về bộ đề"/></label></div></div>
         </div><div className="editor-footer"><span><CheckCircle2/> Mọi thay đổi đã được ghi nhận</span><button className="btn primary" onClick={addQuestion}>Thêm câu tiếp theo <ArrowRight/></button></div></main>
-    </div>{share&&<ShareModal quiz={quiz} onClose={()=>setShare(false)}/>} 
+    </div>
+    {share&&<ShareModal quiz={quiz} onClose={()=>setShare(false)}/>}
+    {importOpen&&<WordImportModal onClose={()=>setImportOpen(false)} onImport={importWord}/>}
   </AdminShell>;
 }
 
@@ -246,7 +293,7 @@ function QuizPlayer({ quiz, go }) {
   if (phase === 'intro') return <div className={`player-page player-${quiz.color}`}><div className="player-nav"><Logo onClick={()=>go('/')}/><button onClick={()=>go('/')}><X/></button></div><div className="intro-card"><span className={`intro-emoji ${quiz.color}`}>{quiz.emoji}</span><span className="public-badge"><Globe2/> BÀI TRẮC NGHIỆM CÔNG KHAI</span><h1>{quiz.title}</h1><p>{quiz.description}</p><div className="quiz-facts"><span><ListChecks/><b>{quiz.questions.length}</b><small>Câu hỏi</small></span><span><Clock3/><b>{quiz.timeLimit}s</b><small>Mỗi câu</small></span><span><Users/><b>{quiz.plays.toLocaleString('vi-VN')}</b><small>Lượt chơi</small></span></div><label className="name-field"><span>TÊN CỦA BẠN</span><input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&name.trim()&&setPhase('playing')} placeholder="Nhập tên để bắt đầu..."/></label><button className="btn primary huge full" disabled={!name.trim()} onClick={()=>setPhase('playing')}>Bắt đầu ngay <ArrowRight/></button><small className="privacy"><ShieldCheck/> Kết quả của bạn chỉ được chia sẻ với người tạo quiz</small></div><span className="deco deco-1">✦</span><span className="deco deco-2">●</span><span className="deco deco-3">▲</span></div>;
   if (phase === 'submitting') return <LoadingScreen label="Đang chấm điểm trên Supabase..."/>;
   if (phase === 'submit-error') return <div className="not-found"><span><Database size={80}/></span><h1>Chưa thể gửi bài</h1><p>{submitError}</p><button className="btn primary" onClick={async()=>{setPhase('submitting');try{setResult(await submitAttempt(quiz.id,name,answers));setPhase('result')}catch(err){setSubmitError(err.message);setPhase('submit-error')}}}>Thử gửi lại</button></div>;
-  if (phase === 'result') return <div className="result-page"><div className="confetti c1">★</div><div className="confetti c2">●</div><div className="confetti c3">◆</div><div className="result-card"><div className="result-trophy"><Trophy/></div><span className="result-label">HOÀN THÀNH XUẤT SẮC!</span><h1>Làm tốt lắm, {name}!</h1><p>Bạn đã hoàn thành “{quiz.title}”</p><div className="score-ring" style={{'--score':`${percent*3.6}deg`}}><div><strong>{percent}%</strong><span>ĐIỂM SỐ</span></div></div><div className="result-stats"><span><CheckCircle2/><b>{score}</b><small>Đúng</small></span><span><X/><b>{quiz.questions.length-score}</b><small>Sai</small></span><span><Flame/><b>{Math.max(1,score)}</b><small>Chuỗi tốt nhất</small></span></div><div className="result-actions"><button className="btn soft big" onClick={()=>{setPhase('intro');setIndex(0);setAnswers([]);setSelected(null);setDone(false);}}><Play/> Chơi lại</button><button className="btn primary big" onClick={()=>go('/')}><Home/> Về trang chủ</button></div></div></div>;
+  if (phase === 'result') return <div className="result-page"><div className="confetti c1">★</div><div className="confetti c2">●</div><div className="confetti c3">◆</div><div className="result-card expanded"><div className="result-trophy"><Trophy/></div><span className="result-label">HOÀN THÀNH XUẤT SẮC!</span><h1>Làm tốt lắm, {name}!</h1><p>Bạn đã hoàn thành “{quiz.title}”</p><div className="result-summary"><div className="score-ring" style={{'--score':`${percent*3.6}deg`}}><div><strong>{percent}%</strong><span>ĐIỂM SỐ</span></div></div><div className="result-stats"><span><CheckCircle2/><b>{score}</b><small>Đúng</small></span><span><X/><b>{quiz.questions.length-score}</b><small>Sai</small></span><span><Flame/><b>{Math.max(1,score)}</b><small>Chuỗi tốt nhất</small></span></div></div>{result?.review?.length>0&&<div className="answer-review"><div className="review-title"><h2>Xem lại đáp án</h2><span>{score}/{quiz.questions.length} câu đúng</span></div>{result.review.map((item,i)=>{const q=quiz.questions[item.position]||quiz.questions[i];const isCorrect=item.selected===item.correct;return <article className={isCorrect?'review-item correct':'review-item wrong'} key={item.position}><div className="review-question"><span>{item.position+1}</span><div><b>{q?.text}</b><small>{isCorrect?'Trả lời chính xác':'Cần xem lại'}</small></div>{isCorrect?<CheckCircle2/>:<X/>}</div><div className="review-answer"><span>Đáp án đúng</span><b>{answerLetters[item.correct]}. {q?.options?.[item.correct]}</b></div>{item.explanation&&<div className="review-explanation"><CircleHelp/><p>{item.explanation}</p></div>}</article>})}</div>}<div className="result-actions"><button className="btn soft big" onClick={()=>{setPhase('intro');setIndex(0);setAnswers([]);setSelected(null);setDone(false);setResult(null);}}><Play/> Chơi lại</button><button className="btn primary big" onClick={()=>go('/')}><Home/> Về trang chủ</button></div></div></div>;
   return <div className={`play-screen player-${quiz.color}`}><header className="play-header"><Logo onClick={()=>go('/')}/><div className="player-name"><span>{name.slice(0,2).toUpperCase()}</span><b>{name}</b></div><button onClick={()=>go('/')}><X/></button></header><div className="play-progress"><i style={{width:`${(index+1)/quiz.questions.length*100}%`}}/></div><main className="play-main"><div className="play-meta"><span>CÂU HỎI {index+1} / {quiz.questions.length}</span><div className={time<=5?'countdown danger':'countdown'}><Clock3/><b>{time}</b><small>GIÂY</small></div></div><h1>{question.text}</h1><div className="play-options">{question.options.map((opt,i)=><button key={i} disabled={done} className={selected===i?'selected':''} onClick={()=>setSelected(i)}><span>{answerLetters[i]}</span><b>{opt || `Đáp án ${answerLetters[i]}`}</b>{selected===i&&<CheckCircle2/>}</button>)}</div><button className="btn next-btn" disabled={selected===null||done} onClick={()=>submitAnswer()}>Xác nhận đáp án <ArrowRight/></button></main></div>;
 }
 

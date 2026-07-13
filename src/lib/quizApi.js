@@ -3,19 +3,29 @@ import { supabase } from './supabase';
 const ownerSelect = `
   id, owner_id, title, description, emoji, color, status, time_limit, plays, average, created_at,
   quiz_questions (
-    id, position, text,
+    id, position, text, question_type,
     quiz_options (id, position, text),
-    quiz_answers (correct_option)
+    quiz_answers (correct_option, explanation)
   )
 `;
 
 const publicSelect = `
   id, title, description, emoji, color, status, time_limit, plays, average, created_at,
   quiz_questions (
-    id, position, text,
+    id, position, text, question_type,
     quiz_options (id, position, text)
   )
 `;
+
+const legacyOwnerSelect = `
+  id, owner_id, title, description, emoji, color, status, time_limit, plays, average, created_at,
+  quiz_questions (id, position, text, quiz_options (id, position, text), quiz_answers (correct_option))
+`;
+const legacyPublicSelect = `
+  id, title, description, emoji, color, status, time_limit, plays, average, created_at,
+  quiz_questions (id, position, text, quiz_options (id, position, text))
+`;
+const isLegacySchemaError = error => /question_type|explanation/i.test(error?.message || '');
 
 function formatQuiz(row, includeAnswers = false) {
   return {
@@ -36,23 +46,32 @@ function formatQuiz(row, includeAnswers = false) {
         return {
           id: question.id,
           text: question.text,
+          type: question.question_type || 'choice',
           options: (question.quiz_options || []).sort((a, b) => a.position - b.position).map(option => option.text),
-          ...(includeAnswers ? { correct: answer?.correct_option ?? 0 } : {})
+          ...(includeAnswers ? { correct: answer?.correct_option ?? 0, explanation: answer?.explanation || '' } : {})
         };
       })
   };
 }
 
 export async function fetchOwnerQuizzes(userId) {
-  const { data, error } = await supabase.from('quizzes').select(ownerSelect)
+  let { data, error } = await supabase.from('quizzes').select(ownerSelect)
     .eq('owner_id', userId).order('created_at', { ascending: false });
+  if (error && isLegacySchemaError(error)) {
+    ({ data, error } = await supabase.from('quizzes').select(legacyOwnerSelect)
+      .eq('owner_id', userId).order('created_at', { ascending: false }));
+  }
   if (error) throw error;
   return (data || []).map(row => formatQuiz(row, true));
 }
 
 export async function fetchPublicQuiz(id) {
-  const { data, error } = await supabase.from('quizzes').select(publicSelect)
+  let { data, error } = await supabase.from('quizzes').select(publicSelect)
     .eq('id', id).eq('status', 'published').single();
+  if (error && isLegacySchemaError(error)) {
+    ({ data, error } = await supabase.from('quizzes').select(legacyPublicSelect)
+      .eq('id', id).eq('status', 'published').single());
+  }
   if (error) throw error;
   return formatQuiz(data, false);
 }
@@ -62,12 +81,22 @@ export async function saveQuiz(quiz, status = quiz.status) {
     title: quiz.title.trim(), description: quiz.description.trim(), emoji: quiz.emoji,
     color: quiz.color, status, time_limit: quiz.timeLimit,
     questions: quiz.questions.map(question => ({
-      text: question.text.trim(), options: question.options.map(option => option.trim()), correct: question.correct
+      text: question.text.trim(), type: question.type || 'choice',
+      options: question.options.map(option => option.trim()), correct: question.correct,
+      explanation: (question.explanation || '').trim()
     }))
   };
   const { data: id, error } = await supabase.rpc('save_quiz', { p_quiz_id: quiz.id || null, p_payload: payload });
-  if (error) throw error;
-  const { data, error: fetchError } = await supabase.from('quizzes').select(ownerSelect).eq('id', id).single();
+  if (error) {
+    if (/exactly four options|between 0 and 3|question_type|explanation/i.test(error.message || '')) {
+      throw new Error('Database chưa được nâng cấp cho dạng câu hỏi mới. Hãy chạy lại file supabase/schema.sql trong SQL Editor.');
+    }
+    throw error;
+  }
+  let { data, error: fetchError } = await supabase.from('quizzes').select(ownerSelect).eq('id', id).single();
+  if (fetchError && isLegacySchemaError(fetchError)) {
+    ({ data, error: fetchError } = await supabase.from('quizzes').select(legacyOwnerSelect).eq('id', id).single());
+  }
   if (fetchError) throw fetchError;
   return formatQuiz(data, true);
 }

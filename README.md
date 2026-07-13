@@ -5,6 +5,9 @@ Website tạo và làm bài trắc nghiệm theo phong cách game-show, gồm đ
 - Landing page giới thiệu sản phẩm.
 - Dashboard quản trị và thống kê nhanh.
 - Tạo, sửa, xóa bộ đề; thêm câu hỏi và chọn đáp án đúng.
+- Hỗ trợ câu trắc nghiệm 2–8 lựa chọn và câu Đúng/Sai.
+- Thêm giải thích đáp án; chỉ trả về cho người chơi sau khi nộp bài.
+- Nhập hàng loạt câu hỏi từ file Word `.docx`.
 - Xuất bản và sao chép link riêng cho từng bài quiz.
 - Người tham gia nhập tên, làm bài theo thời gian và xem kết quả.
 - Dữ liệu thật được lưu trên Supabase PostgreSQL.
@@ -34,6 +37,25 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...
 ```
 
 5. Khởi động lại `npm run dev`, mở `/admin` và đăng ký tài khoản.
+
+Khi cập nhật từ phiên bản cũ, hãy chạy lại toàn bộ `supabase/schema.sql` để thêm loại câu hỏi, giải thích và hỗ trợ tối đa 8 lựa chọn. File schema được thiết kế để có thể chạy lại.
+
+## Mẫu nhập Word
+
+```text
+Câu 1: Thủ đô Việt Nam là gì?
+A. Hà Nội
+B. Đà Nẵng
+C. TP. Hồ Chí Minh
+Đáp án: A
+Giải thích: Hà Nội là thủ đô của Việt Nam.
+
+Câu 2: Trái Đất hình cầu.
+Đáp án: Đúng
+Giải thích: Trái Đất có dạng gần hình cầu.
+```
+
+Mỗi câu trắc nghiệm có thể có từ 2 đến 8 đáp án, ký hiệu từ A đến H. Câu Đúng/Sai chỉ cần ghi `Đáp án: Đúng` hoặc `Đáp án: Sai`.
 
 Không sử dụng `service_role`/secret key trong file `.env` của frontend.
 
