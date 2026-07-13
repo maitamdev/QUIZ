@@ -113,3 +113,16 @@ export async function submitAttempt(quizId, participantName, answers) {
   if (error) throw error;
   return data;
 }
+
+export async function checkAnswer(quizId, questionId, selected) {
+  const { data, error } = await supabase.rpc('check_quiz_answer', {
+    p_quiz_id: quizId, p_question_id: questionId, p_selected: selected
+  });
+  if (error) {
+    if (/check_quiz_answer|schema cache|function.*does not exist/i.test(error.message || '')) {
+      throw new Error('Database chưa có chức năng chấm từng câu. Hãy chạy lại file supabase/schema.sql trong SQL Editor.');
+    }
+    throw error;
+  }
+  return data;
+}

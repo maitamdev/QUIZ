@@ -7,7 +7,7 @@ import {
   Sparkles, Star, Trash2, Trophy, Users, WandSparkles, X, Zap
 } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { deleteQuiz, fetchOwnerQuizzes, fetchPublicQuiz, saveQuiz, submitAttempt } from './lib/quizApi';
+import { checkAnswer, deleteQuiz, fetchOwnerQuizzes, fetchPublicQuiz, saveQuiz, submitAttempt } from './lib/quizApi';
 import { importQuizDocx } from './lib/wordImport';
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -266,35 +266,64 @@ function QuizPlayer({ quiz, go }) {
   const [phase, setPhase] = useState('intro');
   const [name, setName] = useState('');
   const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState([]);
+  const [answers, setAnswers] = useState(()=>Array(quiz?.questions?.length||0).fill(null));
   const [selected, setSelected] = useState(null);
   const [time, setTime] = useState(quiz?.timeLimit || 20);
   const [done, setDone] = useState(false);
   const [result, setResult] = useState(null);
   const [submitError, setSubmitError] = useState('');
+  const [playError, setPlayError] = useState('');
+  const [feedback, setFeedback] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [points, setPoints] = useState(0);
+  const [retryQueue, setRetryQueue] = useState([]);
+  const [round, setRound] = useState('main');
+  const [retryPosition, setRetryPosition] = useState(0);
   const question = quiz?.questions[index];
   useEffect(() => {
-    if (phase !== 'playing' || done) return;
+    if (phase !== 'playing' || done || checking) return;
     if (time <= 0) { submitAnswer(null); return; }
     const timer = setTimeout(()=>setTime(t=>t-1),1000); return ()=>clearTimeout(timer);
-  }, [phase,time,done]);
+  }, [phase,time,done,checking,index]);
   if (!quiz) return <NotFound go={go}/>;
-  function submitAnswer(answer = selected) {
-    if(done) return; setDone(true); const nextAnswers=[...answers,answer]; setAnswers(nextAnswers);
-    setTimeout(async ()=>{
-      if(index<quiz.questions.length-1){ setIndex(index+1); setSelected(null); setDone(false); setTime(quiz.timeLimit); return; }
-      setPhase('submitting');
-      try { setResult(await submitAttempt(quiz.id, name, nextAnswers)); setPhase('result'); }
-      catch (err) { setSubmitError(err.message || 'Không thể gửi bài làm.'); setPhase('submit-error'); }
-    },700);
+  async function submitAnswer(answer = selected) {
+    if(done||checking) return;
+    setChecking(true); setPlayError('');
+    try {
+      const checked = await checkAnswer(quiz.id, question.id, answer);
+      const nextAnswers=[...answers]; nextAnswers[index]=answer; setAnswers(nextAnswers);
+      const earned = checked.is_correct ? (round==='main' ? 700 + time*15 : 350 + time*5) : 0;
+      setFeedback({...checked,earned}); setPoints(value=>value+earned); setDone(true);
+      if(!checked.is_correct && round==='main') setRetryQueue(queue=>queue.includes(index)?queue:[...queue,index]);
+    } catch(err) {
+      if(/Database chưa có chức năng chấm từng câu/i.test(err.message||'')) {
+        const nextAnswers=[...answers]; nextAnswers[index]=answer; setAnswers(nextAnswers);
+        setFeedback({pending:true,earned:0,explanation:err.message}); setDone(true);
+      } else setPlayError(err.message || 'Không thể kiểm tra đáp án.');
+    }
+    finally { setChecking(false); }
   }
+  const finishAttempt = async () => {
+    setPhase('submitting');
+    try { setResult(await submitAttempt(quiz.id,name,answers)); setPhase('result'); }
+    catch(err) { setSubmitError(err.message || 'Không thể gửi bài làm.'); setPhase('submit-error'); }
+  };
+  const nextQuestion = () => {
+    setDone(false); setSelected(null); setFeedback(null); setPlayError(''); setTime(quiz.timeLimit);
+    if(round==='main' && index<quiz.questions.length-1){setIndex(index+1);return;}
+    if(round==='main' && retryQueue.length){setRound('retry');setRetryPosition(0);setIndex(retryQueue[0]);return;}
+    if(round==='retry' && retryPosition<retryQueue.length-1){const next=retryPosition+1;setRetryPosition(next);setIndex(retryQueue[next]);return;}
+    finishAttempt();
+  };
+  const resetGame = () => {setPhase('intro');setIndex(0);setAnswers(Array(quiz.questions.length).fill(null));setSelected(null);setDone(false);setResult(null);setFeedback(null);setPoints(0);setRetryQueue([]);setRound('main');setRetryPosition(0);setTime(quiz.timeLimit)};
   const score = Number(result?.score || 0);
   const percent = Math.round(Number(result?.percent || 0));
   if (phase === 'intro') return <div className={`player-page player-${quiz.color}`}><div className="player-nav"><Logo onClick={()=>go('/')}/><button onClick={()=>go('/')}><X/></button></div><div className="intro-card"><span className={`intro-emoji ${quiz.color}`}>{quiz.emoji}</span><span className="public-badge"><Globe2/> BÀI TRẮC NGHIỆM CÔNG KHAI</span><h1>{quiz.title}</h1><p>{quiz.description}</p><div className="quiz-facts"><span><ListChecks/><b>{quiz.questions.length}</b><small>Câu hỏi</small></span><span><Clock3/><b>{quiz.timeLimit}s</b><small>Mỗi câu</small></span><span><Users/><b>{quiz.plays.toLocaleString('vi-VN')}</b><small>Lượt chơi</small></span></div><label className="name-field"><span>TÊN CỦA BẠN</span><input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&name.trim()&&setPhase('playing')} placeholder="Nhập tên để bắt đầu..."/></label><button className="btn primary huge full" disabled={!name.trim()} onClick={()=>setPhase('playing')}>Bắt đầu ngay <ArrowRight/></button><small className="privacy"><ShieldCheck/> Kết quả của bạn chỉ được chia sẻ với người tạo quiz</small></div><span className="deco deco-1">✦</span><span className="deco deco-2">●</span><span className="deco deco-3">▲</span></div>;
   if (phase === 'submitting') return <LoadingScreen label="Đang chấm điểm trên Supabase..."/>;
   if (phase === 'submit-error') return <div className="not-found"><span><Database size={80}/></span><h1>Chưa thể gửi bài</h1><p>{submitError}</p><button className="btn primary" onClick={async()=>{setPhase('submitting');try{setResult(await submitAttempt(quiz.id,name,answers));setPhase('result')}catch(err){setSubmitError(err.message);setPhase('submit-error')}}}>Thử gửi lại</button></div>;
-  if (phase === 'result') return <div className="result-page"><div className="confetti c1">★</div><div className="confetti c2">●</div><div className="confetti c3">◆</div><div className="result-card expanded"><div className="result-trophy"><Trophy/></div><span className="result-label">HOÀN THÀNH XUẤT SẮC!</span><h1>Làm tốt lắm, {name}!</h1><p>Bạn đã hoàn thành “{quiz.title}”</p><div className="result-summary"><div className="score-ring" style={{'--score':`${percent*3.6}deg`}}><div><strong>{percent}%</strong><span>ĐIỂM SỐ</span></div></div><div className="result-stats"><span><CheckCircle2/><b>{score}</b><small>Đúng</small></span><span><X/><b>{quiz.questions.length-score}</b><small>Sai</small></span><span><Flame/><b>{Math.max(1,score)}</b><small>Chuỗi tốt nhất</small></span></div></div>{result?.review?.length>0&&<div className="answer-review"><div className="review-title"><h2>Xem lại đáp án</h2><span>{score}/{quiz.questions.length} câu đúng</span></div>{result.review.map((item,i)=>{const q=quiz.questions[item.position]||quiz.questions[i];const isCorrect=item.selected===item.correct;return <article className={isCorrect?'review-item correct':'review-item wrong'} key={item.position}><div className="review-question"><span>{item.position+1}</span><div><b>{q?.text}</b><small>{isCorrect?'Trả lời chính xác':'Cần xem lại'}</small></div>{isCorrect?<CheckCircle2/>:<X/>}</div><div className="review-answer"><span>Đáp án đúng</span><b>{answerLetters[item.correct]}. {q?.options?.[item.correct]}</b></div>{item.explanation&&<div className="review-explanation"><CircleHelp/><p>{item.explanation}</p></div>}</article>})}</div>}<div className="result-actions"><button className="btn soft big" onClick={()=>{setPhase('intro');setIndex(0);setAnswers([]);setSelected(null);setDone(false);setResult(null);}}><Play/> Chơi lại</button><button className="btn primary big" onClick={()=>go('/')}><Home/> Về trang chủ</button></div></div></div>;
-  return <div className={`play-screen player-${quiz.color}`}><header className="play-header"><Logo onClick={()=>go('/')}/><div className="player-name"><span>{name.slice(0,2).toUpperCase()}</span><b>{name}</b></div><button onClick={()=>go('/')}><X/></button></header><div className="play-progress"><i style={{width:`${(index+1)/quiz.questions.length*100}%`}}/></div><main className="play-main"><div className="play-meta"><span>CÂU HỎI {index+1} / {quiz.questions.length}</span><div className={time<=5?'countdown danger':'countdown'}><Clock3/><b>{time}</b><small>GIÂY</small></div></div><h1>{question.text}</h1><div className="play-options">{question.options.map((opt,i)=><button key={i} disabled={done} className={selected===i?'selected':''} onClick={()=>setSelected(i)}><span>{answerLetters[i]}</span><b>{opt || `Đáp án ${answerLetters[i]}`}</b>{selected===i&&<CheckCircle2/>}</button>)}</div><button className="btn next-btn" disabled={selected===null||done} onClick={()=>submitAnswer()}>Xác nhận đáp án <ArrowRight/></button></main></div>;
+  if (phase === 'result') return <div className="result-page"><div className="confetti c1">★</div><div className="confetti c2">●</div><div className="confetti c3">◆</div><div className="result-card expanded"><div className="result-trophy"><Trophy/></div><span className="result-label">HOÀN THÀNH XUẤT SẮC!</span><h1>Làm tốt lắm, {name}!</h1><p>Bạn đã hoàn thành “{quiz.title}”</p><div className="result-summary"><div className="score-ring" style={{'--score':`${percent*3.6}deg`}}><div><strong>{percent}%</strong><span>ĐIỂM SỐ</span></div></div><div className="result-stats"><span><CheckCircle2/><b>{score}</b><small>Đúng</small></span><span><X/><b>{quiz.questions.length-score}</b><small>Sai</small></span><span><Star/><b>{points.toLocaleString('vi-VN')}</b><small>Điểm game</small></span></div></div>{result?.review?.length>0&&<div className="answer-review"><div className="review-title"><h2>Xem lại đáp án</h2><span>{score}/{quiz.questions.length} câu đúng</span></div>{result.review.map((item,i)=>{const q=quiz.questions[item.position]||quiz.questions[i];const isCorrect=item.selected===item.correct;return <article className={isCorrect?'review-item correct':'review-item wrong'} key={item.position}><div className="review-question"><span>{item.position+1}</span><div><b>{q?.text}</b><small>{isCorrect?'Trả lời chính xác':'Cần xem lại'}</small></div>{isCorrect?<CheckCircle2/>:<X/>}</div><div className="review-answer"><span>Đáp án đúng</span><b>{answerLetters[item.correct]}. {q?.options?.[item.correct]}</b></div>{item.explanation&&<div className="review-explanation"><CircleHelp/><p>{item.explanation}</p></div>}</article>})}</div>}<div className="result-actions"><button className="btn soft big" onClick={resetGame}><Play/> Chơi lại</button><button className="btn primary big" onClick={()=>go('/')}><Home/> Về trang chủ</button></div></div></div>;
+  const progress = round==='main' ? (index+1)/quiz.questions.length*100 : (retryPosition+1)/Math.max(retryQueue.length,1)*100;
+  return <div className={`play-screen player-${quiz.color}`}><header className="play-header"><Logo onClick={()=>go('/')}/><div className="play-hud"><div className="points-pill"><Star fill="currentColor"/><span><b>{points.toLocaleString('vi-VN')}</b> điểm</span></div><div className="player-name"><span>{name.slice(0,2).toUpperCase()}</span><b>{name}</b></div></div><button onClick={()=>go('/')}><X/></button></header><div className="play-progress"><i style={{width:`${progress}%`}}/></div><main className="play-main"><div className="play-meta"><span>{round==='retry'?`ÔN LẠI ${retryPosition+1} / ${retryQueue.length}`:`CÂU HỎI ${index+1} / ${quiz.questions.length}`}</span><div className={time<=5?'countdown danger':'countdown'}><Clock3/><b>{time}</b><small>GIÂY</small></div>{round==='retry'&&<span className="retry-badge"><Flame/> Câu cần củng cố</span>}</div><h1>{question.text}</h1>{playError&&<div className="data-error">{playError}</div>}<div className="play-options">{question.options.map((opt,i)=>{let state=selected===i?'selected':'';if(done&&feedback&&!feedback.pending){if(i===feedback.correct)state='correct';else if(i===selected)state='wrong'}return <button key={i} disabled={done||checking} className={state} onClick={()=>setSelected(i)}><span>{answerLetters[i]}</span><b>{opt || `Đáp án ${answerLetters[i]}`}</b>{done&&feedback&&!feedback.pending&&i===feedback.correct?<CheckCircle2/>:selected===i?<CheckCircle2/>:null}</button>})}</div>{done&&feedback&&<div className={feedback.pending?'instant-feedback neutral':feedback.is_correct?'instant-feedback success':'instant-feedback error'}><span>{feedback.is_correct?<CheckCircle2/>:<CircleAlert/>}</span><div><b>{feedback.pending?'Cần nâng cấp database để xem đúng/sai ngay':feedback.is_correct?`Chính xác! +${feedback.earned} điểm`:'Chưa đúng — đã thêm vào vòng ôn lại'}</b><p>{feedback.explanation||`Đáp án đúng là ${answerLetters[feedback.correct]}. ${question.options[feedback.correct]}`}</p></div></div>}{done?<button className="btn next-btn ready" onClick={nextQuestion}>{round==='main'&&index===quiz.questions.length-1?(retryQueue.length?'Bắt đầu ôn lại':'Xem kết quả'):round==='retry'&&retryPosition===retryQueue.length-1?'Xem kết quả':'Câu tiếp theo'} <ArrowRight/></button>:<button className="btn next-btn" disabled={selected===null||checking} onClick={()=>submitAnswer()}>{checking?<LoaderCircle className="spin"/>:'Xác nhận đáp án'} <ArrowRight/></button>}</main></div>;
 }
 
 function LoadingScreen({ label = 'Đang tải dữ liệu...' }) {

@@ -285,10 +285,43 @@ begin
 end;
 $$;
 
+-- Check one submitted answer without exposing the complete answer key in the quiz payload.
+create or replace function public.check_quiz_answer(p_quiz_id uuid, p_question_id uuid, p_selected integer)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_correct integer;
+  v_explanation text;
+begin
+  select qa.correct_option, qa.explanation
+  into v_correct, v_explanation
+  from public.quiz_questions qq
+  join public.quizzes q on q.id = qq.quiz_id
+  join public.quiz_answers qa on qa.question_id = qq.id
+  where q.id = p_quiz_id and q.status = 'published' and qq.id = p_question_id;
+
+  if not found then raise exception 'Published quiz question not found'; end if;
+  if p_selected is not null and (p_selected < 0 or p_selected > 7) then
+    raise exception 'Selected option is invalid';
+  end if;
+
+  return jsonb_build_object(
+    'is_correct', p_selected is not null and p_selected = v_correct,
+    'correct', v_correct,
+    'explanation', coalesce(v_explanation, '')
+  );
+end;
+$$;
+
 revoke all on function public.save_quiz(uuid, jsonb) from public;
 grant execute on function public.save_quiz(uuid, jsonb) to authenticated;
 revoke all on function public.submit_quiz_attempt(uuid, text, jsonb) from public;
 grant execute on function public.submit_quiz_attempt(uuid, text, jsonb) to anon, authenticated;
+revoke all on function public.check_quiz_answer(uuid, uuid, integer) from public;
+grant execute on function public.check_quiz_answer(uuid, uuid, integer) to anon, authenticated;
 
 grant select on public.quizzes, public.quiz_questions, public.quiz_options to anon, authenticated;
 grant insert, update, delete on public.quizzes, public.quiz_questions, public.quiz_options, public.quiz_answers to authenticated;

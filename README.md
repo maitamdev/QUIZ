@@ -7,6 +7,8 @@ Website tạo và làm bài trắc nghiệm theo phong cách game-show, gồm đ
 - Tạo, sửa, xóa bộ đề; thêm câu hỏi và chọn đáp án đúng.
 - Hỗ trợ câu trắc nghiệm 2–8 lựa chọn và câu Đúng/Sai.
 - Thêm giải thích đáp án; chỉ trả về cho người chơi sau khi nộp bài.
+- Phản hồi đúng/sai tức thời: đáp án đúng màu xanh, lựa chọn sai màu đỏ.
+- Tính điểm theo tốc độ và tự đưa câu sai vào vòng ôn lại cuối bài.
 - Nhập hàng loạt câu hỏi từ file Word `.docx`.
 - Xuất bản và sao chép link riêng cho từng bài quiz.
 - Người tham gia nhập tên, làm bài theo thời gian và xem kết quả.
